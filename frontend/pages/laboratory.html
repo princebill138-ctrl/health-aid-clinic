@@ -235,8 +235,9 @@
         <div class="form-grid">
           <div class="form-group col-span-2">
             <label class="form-label">Patient <span class="req">*</span>
-              <button type="button" class="btn btn-sm btn-outline" style="float:right" onclick="openPatientQuickAdd('request')">+ Add New Patient</button></label>
-            <select name="patient" class="form-control" id="rq-patient" required><option value="">Select patient...</option></select>
+              <button type="button" class="btn btn-sm btn-outline" style="float:right" onclick="openPatientQuickAdd('request')">+ Register Walk-in Patient</button></label>
+            <select class="form-control" id="rq-patient" required><option value="">Select patient...</option></select>
+            <p style="font-size:11.5px;color:var(--text-light);margin-top:4px">Choose an existing patient from Patient Records, or register a laboratory-only walk-in — walk-ins are <strong>not</strong> added to Patient Records.</p>
           </div>
           <div class="form-group">
             <label class="form-label">Priority</label>
@@ -247,8 +248,11 @@
             <input type="text" name="requestedByName" class="form-control" placeholder="Doctor / clinician">
           </div>
           <div class="form-group col-span-2">
-            <label class="form-label">Tests <span class="req">*</span> <span id="rq-total" style="float:right;font-weight:600;color:var(--brown-mid)"></span></label>
-            <input type="text" class="form-control" id="rq-test-filter" placeholder="Filter tests..." style="margin-bottom:8px">
+            <label class="form-label">Type of Test <span class="req">*</span> <span id="rq-total" style="float:right;font-weight:600;color:var(--brown-mid)"></span></label>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <select class="form-control" id="rq-test-category" style="flex:0 0 200px"><option value="">All Test Types</option></select>
+              <input type="text" class="form-control" id="rq-test-filter" placeholder="Filter by name or code...">
+            </div>
             <div class="test-picker" id="rq-test-picker"></div>
           </div>
           <div class="form-group col-span-2">
@@ -510,12 +514,12 @@
   </div>
 </div>
 
-<!-- QUICK-ADD PATIENT MODAL -->
+<!-- WALK-IN PATIENT MODAL (laboratory-only, NOT added to Patient Records) -->
 <div class="modal-overlay" id="patient-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title">Register New Patient</span><button class="modal-close" onclick="Modal.close('patient-modal')">×</button></div>
+    <div class="modal-header"><span class="modal-title">Register Walk-in Patient</span><button class="modal-close" onclick="Modal.close('patient-modal')">×</button></div>
     <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">Creates a full patient record (same as Patient Records) so this person can be selected for lab test requests.</p>
+      <p style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">For someone who needs a lab test but has no chart yet. This is <strong>laboratory-only</strong> — it will not create or appear in Patient Records.</p>
       <form id="patient-form" onsubmit="return false">
         <div class="form-grid">
           <div class="form-group col-span-2">
@@ -572,7 +576,7 @@
 renderSidebar('laboratory');
 
 // ── STATE ──
-const S = { tests: [], categories: [], patients: [], requests: [], samples: [], reagents: [], alerts: [], investigations: [], tab: 'requests' };
+const S = { tests: [], categories: [], patients: [], walkins: [], requests: [], samples: [], reagents: [], alerts: [], investigations: [], tab: 'requests' };
 const SAMPLE_TYPES = ['Blood', 'Blood (EDTA)', 'Blood (Fluoride)', 'Serum', 'Plasma', 'Urine', 'Stool', 'Sputum', 'Swab', 'CSF', 'Other'];
 let current = { request: null, test: null, category: null, reagent: null, sample: null, stockMode: 'restock', stockId: null, reportRequest: null, patientQuickAddFor: null };
 
@@ -681,17 +685,18 @@ async function savePatientQuickAdd() {
   const form = $('patient-form');
   if (!form.checkValidity()) { form.reportValidity(); return; }
   try {
-    const patient = await API.post('/patients', getFormData(form));
-    Toast.success(`Patient ${patient.name} registered`);
-    S.patients.push(patient);
+    // Laboratory-only walk-in — POSTs to the Laboratory module's own endpoint,
+    // never /api/patients, so this never creates or touches a Patient Records entry.
+    const walkin = await API.post('/laboratory/walkin-patients', getFormData(form));
+    Toast.success(`${walkin.name} registered (laboratory-only)`);
+    S.walkins.push(walkin);
     Modal.close('patient-modal');
     if (current.patientQuickAddFor === 'request') {
-      // Request modal is open behind this one — just add & select the new patient in it.
-      const opt = new Option(`${patient.name} — ${patient.patientId} (${patient.age}y ${patient.sex})`, patient._id, true, true);
-      $('rq-patient').add(opt);
+      // Request modal is open behind this one — just add & select the new walk-in in it.
+      fillPatientDropdown(`w:${walkin._id}`);
     } else {
       // Registered from the toolbar (no request open yet) — go straight into creating their request.
-      await openRequest(patient._id);
+      await openRequest(null, null, walkin._id);
     }
   } catch (e) { Toast.error(e.message); }
 }
@@ -714,6 +719,13 @@ async function loadPatients() {
   if (S.patients.length) return;
   try { S.patients = (await API.get('/patients?limit=1000')).patients || []; } catch (e) { Toast.error('Failed to load patients'); }
 }
+async function loadWalkins() {
+  if (S.walkins.length) return;
+  try { S.walkins = await API.get('/laboratory/walkin-patients'); } catch (e) { Toast.error('Failed to load walk-in patients'); }
+}
+function fillTestCategoryDropdown() {
+  $('rq-test-category').innerHTML = '<option value="">All Test Types</option>' + S.categories.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+}
 
 // ══════════ REQUESTS ══════════
 async function loadRequests() {
@@ -726,7 +738,7 @@ async function loadRequests() {
       const open = !['completed', 'cancelled'].includes(r.status);
       return `<tr class="${hasCrit ? 'critical-row' : hasAbn ? 'abnormal-row' : ''}">
         <td><code>${esc(r.requestId)}</code></td>
-        <td><strong>${esc(r.patientName)}</strong><div style="font-size:12px;color:var(--text-light)">${esc(r.patientId)} · ${esc(r.age ?? '—')}y ${esc(r.sex)}</div></td>
+        <td><strong>${esc(r.patientName)}</strong>${r.patient ? '' : ' <span class="badge badge-brown" style="font-size:10px">Walk-in</span>'}<div style="font-size:12px;color:var(--text-light)">${esc(r.patientId)} · ${esc(r.age ?? '—')}y ${esc(r.sex)}</div></td>
         <td>${esc(r.tests.map(t => t.testName).slice(0, 2).join(', '))}${r.tests.length > 2 ? ` +${r.tests.length - 2}` : ''}<div style="font-size:12px;color:var(--text-light)">${done}/${r.tests.length} resulted</div></td>
         <td><span class="badge ${PRIORITY_CLS[r.priority]}">${r.priority === 'stat' ? 'STAT' : esc(r.priority)}</span></td>
         <td>${Fmt.datetime(r.createdAt)}</td>
@@ -743,27 +755,36 @@ async function loadRequests() {
   } catch (e) { Toast.error('Failed to load requests'); }
 }
 
-async function openRequest(presetPatientId, presetNotes) {
-  await Promise.all([loadPatients(), S.tests.length ? null : loadRefData()]);
-  // A patient just registered here (quick-add) or one already loaded won't yet be
-  // in the cached list fetched by loadPatients() if it was created after that cache
-  // was filled — make sure the preset patient is always selectable.
+// Patient dropdown values are prefixed so we know which collection to submit against:
+// "p:<id>" = existing patient from Patient Records, "w:<id>" = laboratory-only walk-in.
+function fillPatientDropdown(selectedValue) {
+  const opts = ['<option value="">Select patient...</option>'];
+  if (S.patients.length) opts.push(`<optgroup label="Patient Records">${S.patients.map(p => `<option value="p:${p._id}">${esc(p.name)} — ${esc(p.patientId)} (${esc(p.age)}y ${esc(p.sex)})</option>`).join('')}</optgroup>`);
+  if (S.walkins.length) opts.push(`<optgroup label="Laboratory Walk-in Patients">${S.walkins.map(w => `<option value="w:${w._id}">${esc(w.name)} — ${esc(w.walkInId)} (${esc(w.age)}y ${esc(w.sex)})</option>`).join('')}</optgroup>`);
+  $('rq-patient').innerHTML = opts.join('');
+  if (selectedValue) $('rq-patient').value = selectedValue;
+}
+async function openRequest(presetPatientId, presetNotes, presetWalkInId) {
+  await Promise.all([loadPatients(), loadWalkins(), S.tests.length ? null : loadRefData()]);
+  // A patient just registered here or one loaded after the cache was filled
+  // won't be in it yet — make sure a preset patient is always selectable.
   if (presetPatientId && !S.patients.some(p => p._id === presetPatientId)) {
     try { S.patients.push(await API.get(`/patients/${presetPatientId}`)); } catch (e) {}
   }
   $('request-form').reset();
-  $('rq-patient').innerHTML = '<option value="">Select patient...</option>' +
-    S.patients.map(p => `<option value="${p._id}">${esc(p.name)} — ${esc(p.patientId)} (${esc(p.age)}y ${esc(p.sex)})</option>`).join('');
-  if (presetPatientId) $('rq-patient').value = presetPatientId;
+  fillPatientDropdown(presetWalkInId ? `w:${presetWalkInId}` : presetPatientId ? `p:${presetPatientId}` : '');
   if (presetNotes) $('request-form').elements.clinicalNotes.value = presetNotes;
-  $('rq-test-filter').value = '';
+  $('rq-test-filter').value = ''; fillTestCategoryDropdown(); $('rq-test-category').value = '';
   renderTestPicker();
   Modal.open('request-modal');
 }
 function renderTestPicker() {
   const checked = new Set([...document.querySelectorAll('#rq-test-picker input:checked')].map(i => i.value));
   const f = $('rq-test-filter').value.toLowerCase();
-  const list = S.tests.filter(t => t.active !== false && (!f || t.name.toLowerCase().includes(f) || (t.code || '').toLowerCase().includes(f) || (t.category || '').toLowerCase().includes(f)));
+  const cat = $('rq-test-category').value;
+  const list = S.tests.filter(t => t.active !== false
+    && (!cat || t.category === cat)
+    && (!f || t.name.toLowerCase().includes(f) || (t.code || '').toLowerCase().includes(f) || (t.category || '').toLowerCase().includes(f)));
   if (!list.length) { $('rq-test-picker').innerHTML = `<p style="padding:12px;font-size:13px;color:var(--text-light)">${S.tests.length ? 'No matching tests.' : 'No laboratory tests defined yet. Add tests in the Laboratory Tests tab.'}</p>`; updateTotal(); return; }
   const groups = {};
   list.forEach(t => (groups[t.category || 'Uncategorised'] = groups[t.category || 'Uncategorised'] || []).push(t));
@@ -778,11 +799,16 @@ function updateTotal() {
 }
 async function saveRequest() {
   const form = $('request-form');
+  const picked = $('rq-patient').value;
+  if (!picked) { Toast.warning('Select a patient'); return; }
   if (!form.checkValidity()) { form.reportValidity(); return; }
   const testIds = [...document.querySelectorAll('#rq-test-picker input:checked')].map(i => i.value);
   if (!testIds.length) { Toast.warning('Select at least one test'); return; }
+  const [kind, id] = [picked.slice(0, 1), picked.slice(2)];
+  const payload = { ...getFormData(form), testIds };
+  if (kind === 'p') payload.patient = id; else payload.walkInPatient = id;
   try {
-    await API.post('/laboratory/requests', { ...getFormData(form), testIds });
+    await API.post('/laboratory/requests', payload);
     Toast.success('Test request created');
     Modal.close('request-modal'); loadRequests(); loadStats();
   } catch (e) { Toast.error(e.message); }
@@ -1205,6 +1231,7 @@ wire(['ts-search'], loadTests, 'input'); wire(['ts-category'], loadTests, 'chang
 wire(['ct-search'], loadCategories, 'input');
 wire(['rg-search'], loadReagents, 'input'); wire(['rg-low'], loadReagents, 'change');
 $('rq-test-filter').addEventListener('input', renderTestPicker);
+$('rq-test-category').addEventListener('change', renderTestPicker);
 $('sm-type').innerHTML = '<option value="">All Sample Types</option>' + SAMPLE_TYPES.map(t => `<option>${t}</option>`).join('');
 
 // ── INIT ──

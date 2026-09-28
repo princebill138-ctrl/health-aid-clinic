@@ -5,6 +5,7 @@ const LabTest = require('../models/LabTest');
 const LabRequest = require('../models/LabRequest');
 const LabSample = require('../models/LabSample');
 const LabReagent = require('../models/LabReagent');
+const LabPatient = require('../models/LabPatient');
 const Patient = require('../models/Patient');
 const { protect } = require('../middleware/auth');
 
@@ -218,6 +219,22 @@ router.post('/tests/seed-defaults', protect, async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
+// ── WALK-IN PATIENTS (laboratory-only — never written to the Patient collection) ──
+router.get('/walkin-patients', protect, async (req, res) => {
+  try {
+    const { search } = req.query;
+    const q = search ? { $or: [{ name: rx(search) }, { walkInId: rx(search) }, { contact: rx(search) }] } : {};
+    res.json(await LabPatient.find(q).sort({ createdAt: -1 }).limit(500));
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.post('/walkin-patients', protect, async (req, res) => {
+  try {
+    const walkInId = await nextId(LabPatient, 'walkInId', 'LWI', 5);
+    res.status(201).json(await LabPatient.create({ ...req.body, walkInId, addedBy: req.user._id }));
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
 // ── REQUESTS ──
 router.get('/requests', protect, async (req, res) => {
   try {
@@ -271,18 +288,32 @@ router.get('/requests/:id', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// Patient can come from Patient Records (`patient`) OR from a laboratory-only
+// walk-in patient (`walkInPatient`) — exactly one is required. Walk-ins never
+// touch the Patient collection, so they never appear in Patient Records.
 router.post('/requests', protect, async (req, res) => {
   try {
-    const { patient: patientMongoId, testIds = [], priority, clinicalNotes, requestedByName } = req.body;
-    const patient = await Patient.findById(patientMongoId);
-    if (!patient) return res.status(400).json({ message: 'Select a valid patient' });
+    const { patient: patientMongoId, walkInPatient: walkInMongoId, testIds = [], priority, clinicalNotes, requestedByName } = req.body;
     if (!testIds.length) return res.status(400).json({ message: 'Select at least one test' });
+
+    let snapshot;
+    if (patientMongoId) {
+      const patient = await Patient.findById(patientMongoId);
+      if (!patient) return res.status(400).json({ message: 'Select a valid patient' });
+      snapshot = { patient: patient._id, patientId: patient.patientId, patientName: patient.name, age: patient.age, sex: patient.sex };
+    } else if (walkInMongoId) {
+      const w = await LabPatient.findById(walkInMongoId);
+      if (!w) return res.status(400).json({ message: 'Select a valid walk-in patient' });
+      snapshot = { patientId: w.walkInId, patientName: w.name, age: w.age, sex: w.sex };
+    } else {
+      return res.status(400).json({ message: 'Select a patient' });
+    }
+
     const tests = await LabTest.find({ _id: { $in: testIds } });
     if (!tests.length) return res.status(400).json({ message: 'Selected tests not found' });
     const doc = await LabRequest.create({
       requestId: await nextId(LabRequest, 'requestId', 'LAB', 5),
-      patient: patient._id, patientId: patient.patientId, patientName: patient.name,
-      age: patient.age, sex: patient.sex,
+      ...snapshot,
       requestedByName: requestedByName || userName(req),
       priority, clinicalNotes,
       tests: tests.map(t => ({ test: t._id, testName: t.name, category: t.category, result: { unit: t.unit } })),
