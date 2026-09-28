@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vaccination — Health-Aid Clinic</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+        <div><div class="topbar-title">Vaccination Program</div></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="topbar-date"></div>
+        <button class="btn btn-primary" onclick="openAdd()">+ Record Vaccination</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon"></span>
+          <input type="text" class="form-control" id="search-input" placeholder="Search patient name or ID...">
+        </div>
+        <select class="form-control" id="vaccine-filter" style="width:auto">
+          <option value="">All Vaccines</option>
+          <option>COVID-19</option><option>Hepatitis B</option><option>Polio</option>
+          <option>Measles</option><option>Yellow Fever</option><option>Meningitis</option>
+          <option>Tetanus</option><option>BCG</option>
+        </select>
+        <select class="form-control" id="sex-filter" style="width:auto">
+          <option value="">All Sex</option><option>Male</option><option>Female</option><option>Other</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Vaccination Records</span>
+          <span id="vac-count" style="font-size:13px;color:var(--text-light)"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Vac ID</th><th>Patient ID</th><th>Name</th><th>Age</th><th>Sex</th><th>Vaccine</th><th>Dose</th><th>Location</th><th>Date</th><th>Results</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="vac-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="vac-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Record Vaccination</span>
+      <button class="modal-close" onclick="Modal.close('vac-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="vac-form">
+        <div class="form-grid cols-3">
+          <div class="form-group">
+            <label class="form-label">Patient ID <span class="req">*</span></label>
+            <input type="text" name="patientId" class="form-control" placeholder="e.g. PAT-00001" required>
+          </div>
+          <div class="form-group col-span-2 ">
+            <label class="form-label">Patient Name <span class="req">*</span></label>
+            <input type="text" name="patientName" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Age <span class="req">*</span></label>
+            <input type="number" name="age" class="form-control" min="0" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sex <span class="req">*</span></label>
+            <select name="sex" class="form-control" required>
+              <option value="">Select</option><option>Male</option><option>Female</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input type="tel" name="phoneNumber" class="form-control" placeholder="e.g. +233 24 000 0000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Location <span class="req">*</span></label>
+            <input type="text" name="location" class="form-control" placeholder="Town / Facility" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Vaccine Type <span class="req">*</span></label>
+            <select name="vaccineType" class="form-control" required>
+              <option value="">Select</option>
+              <option>COVID-19</option><option>Hepatitis B</option><option>Polio</option>
+              <option>Measles</option><option>Yellow Fever</option><option>Meningitis</option>
+              <option>Tetanus</option><option>BCG</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dose Number</label>
+            <select name="doseNumber" class="form-control">
+              <option>1st</option><option>2nd</option><option>3rd</option><option>Booster</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Batch Number</label>
+            <input type="text" name="batchNumber" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date Administered <span class="req">*</span></label>
+            <input type="date" name="dateAdministered" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Next Due Date</label>
+            <input type="date" name="nextDueDate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Administrator</label>
+            <input type="text" name="administrator" class="form-control" placeholder="Name of staff">
+          </div>
+          <div class="form-group col-span-3">
+            <label class="form-label">Test Results</label>
+            <input type="text" name="testResults" class="form-control" placeholder="e.g. Positive, Negative, Inconclusive, N/A">
+          </div>
+          <div class="form-group col-span-3">
+            <label class="form-label">Side Effects / Observations</label>
+            <input type="text" name="sideEffects" class="form-control" placeholder="e.g. Mild fever, None">
+          </div>
+          <div class="form-group col-span-3">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Modal.close('vac-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveVac()">Save Record</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/sidebar.js"></script>
+<script src="/js/app.js"></script>
+<script>
+renderSidebar('vaccination');
+let editId = null;
+
+async function loadVaccinations() {
+  const search = document.getElementById('search-input').value;
+  const vaccineType = document.getElementById('vaccine-filter').value;
+  const sex = document.getElementById('sex-filter').value;
+  let url = `/vaccination?search=${encodeURIComponent(search)}`;
+  if (vaccineType) url += `&vaccineType=${encodeURIComponent(vaccineType)}`;
+  if (sex) url += `&sex=${sex}`;
+  try {
+    const records = await API.get(url);
+    document.getElementById('vac-count').textContent = `${records.length} records`;
+    const tbody = document.getElementById('vac-table');
+    if (!records.length) {
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="icon"><i class="fa-solid fa-syringe"></i></div><h3>No vaccination records found</h3></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td><code>${r.vaccinationId}</code></td>
+        <td><code>${r.patientId}</code></td>
+        <td><strong>${r.patientName}</strong></td>
+        <td>${r.age}</td>
+        <td>${r.sex}</td>
+        <td><span class="badge badge-brown">${r.vaccineType}</span></td>
+        <td>${r.doseNumber}</td>
+        <td>${r.location}</td>
+        <td>${Fmt.date(r.dateAdministered)}</td>
+        <td>${r.testResults || '—'}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editVac('${r._id}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteVac('${r._id}')"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { Toast.error('Failed to load vaccinations'); }
+}
+
+function openAdd() {
+  editId = null;
+  document.getElementById('modal-title').textContent = 'Record Vaccination';
+  document.getElementById('vac-form').reset();
+  Modal.open('vac-modal');
+}
+
+async function editVac(id) {
+  try {
+    const records = await API.get('/vaccination');
+    const r = records.find(x => x._id === id);
+    if (!r) return;
+    editId = id;
+    document.getElementById('modal-title').textContent = 'Edit Record';
+    fillForm(document.getElementById('vac-form'), r);
+    Modal.open('vac-modal');
+  } catch(e) { Toast.error('Failed to load record'); }
+}
+
+async function saveVac() {
+  const form = document.getElementById('vac-form');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  const data = getFormData(form);
+  try {
+    if (editId) { await API.put(`/vaccination/${editId}`, data); Toast.success('Record updated'); }
+    else { await API.post('/vaccination', data); Toast.success('Vaccination recorded'); }
+    Modal.close('vac-modal');
+    loadVaccinations();
+  } catch(e) { Toast.error(e.message); }
+}
+
+async function deleteVac(id) {
+  if (!confirm('Delete this vaccination record?')) return;
+  try { await API.delete(`/vaccination/${id}`); Toast.success('Deleted'); loadVaccinations(); }
+  catch(e) { Toast.error(e.message); }
+}
+
+['search-input','vaccine-filter','sex-filter'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', loadVaccinations);
+  document.getElementById(id)?.addEventListener('change', loadVaccinations);
+});
+loadVaccinations();
+</script>
+</body>
+</html>

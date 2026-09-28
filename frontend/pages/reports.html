@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports — Health-Aid Clinic</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .report-section { margin-bottom: 28px; }
+    .report-section h3 { font-size: 16px; margin-bottom: 14px; color: var(--brown-mid); }
+    @media print {
+      .sidebar, .topbar, .toolbar, .btn, .no-print { display:none!important; }
+      .main-content { margin-left: 0; }
+      .card { box-shadow: none; border: 1px solid #ccc; }
+      .report-header { display: block !important; text-align: center; padding: 20px; border-bottom: 2px solid #333; margin-bottom: 24px; }
+    }
+    .report-header { display: none; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+        <div><div class="topbar-title">Reports</div></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="topbar-date"></div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Print header (only visible on print) -->
+      <div class="report-header" id="print-report-header">
+        <h1><i class="fa-solid fa-hospital"></i> HEALTH-AID CLINIC</h1>
+        <h2 id="print-report-title">Monthly Report</h2>
+        <p id="print-report-period"></p>
+        <p style="font-size:12px">Generated: <span id="print-date"></span></p>
+      </div>
+
+      <div class="toolbar no-print">
+        <select class="form-control" id="month-sel" style="width:auto">
+          <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+          <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+          <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+        </select>
+        <select class="form-control" id="year-sel" style="width:auto"></select>
+        <button class="btn btn-primary" onclick="loadReport()"><i class="fa-solid fa-arrows-rotate"></i> Generate Report</button>
+        <button class="btn btn-secondary" onclick="printReport()"><i class="fa-solid fa-print"></i> Print / Export PDF</button>
+        <button class="btn btn-secondary" onclick="downloadReportCSV()"><i class="fa-solid fa-file-arrow-down"></i> Download Patient Attendance (CSV)</button>
+      </div>
+
+      <div id="report-content">
+        <div class="empty-state" style="padding:60px 0">
+          <div class="icon"></div>
+          <h3>Select a month and click "Generate Report"</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/sidebar.js"></script>
+<script src="/js/app.js"></script>
+<script>
+renderSidebar('reports');
+
+const now = new Date();
+const yearSel = document.getElementById('year-sel');
+for (let y = now.getFullYear(); y >= 2023; y--) {
+  const o = document.createElement('option');
+  o.value = y; o.textContent = y;
+  if (y === now.getFullYear()) o.selected = true;
+  yearSel.appendChild(o);
+}
+document.getElementById('month-sel').value = now.getMonth() + 1;
+
+const MONTHS = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+let currentReportData = null;
+let currentReportPeriod = '';
+
+async function loadReport() {
+  const month = document.getElementById('month-sel').value;
+  const year = document.getElementById('year-sel').value;
+  const btn = document.querySelector('.btn-primary');
+  btn.textContent = 'Loading...'; btn.disabled = true;
+  try {
+    const data = await API.get(`/reports/monthly?month=${month}&year=${year}`);
+    renderReport(data, month, year);
+  } catch(e) { Toast.error('Failed to load report'); }
+  btn.textContent = 'Generate Report'; btn.disabled = false;
+}
+
+function renderReport(data, month, year) {
+  const period = `${MONTHS[month]} ${year}`;
+  document.getElementById('print-report-title').textContent = `Monthly Report — ${period}`;
+  document.getElementById('print-report-period').textContent = period;
+  document.getElementById('print-date').textContent = new Date().toLocaleString('en-GB');
+
+  const { patients, billing, attendance, appointments } = data;
+  currentReportData = data;
+  currentReportPeriod = period;
+
+  document.getElementById('report-content').innerHTML = `
+    <!-- Summary Cards -->
+    <div class="stats-grid" style="margin-bottom:24px">
+      <div class="stat-card"><div class="stat-icon brown"><i class="fa-solid fa-user-plus"></i></div><div class="stat-info"><div class="label">New Patients</div><div class="value">${patients.count}</div></div></div>
+      <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-sack-dollar"></i></div><div class="stat-info"><div class="label">Revenue</div><div class="value" style="font-size:18px">${Fmt.currency(billing.revenue)}</div></div></div>
+      <div class="stat-card"><div class="stat-icon orange"><i class="fa-solid fa-hourglass-half"></i></div><div class="stat-info"><div class="label">Pending</div><div class="value" style="font-size:18px">${Fmt.currency(billing.pending)}</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue"><i class="fa-solid fa-calendar-days"></i></div><div class="stat-info"><div class="label">Appointments</div><div class="value">${appointments.count}</div></div></div>
+      <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-calendar-check"></i></div><div class="stat-info"><div class="label">Completed Appts</div><div class="value">${appointments.completed}</div></div></div>
+      <div class="stat-card"><div class="stat-icon brown"><i class="fa-solid fa-clock"></i></div><div class="stat-info"><div class="label">Attendance Days</div><div class="value">${attendance.present}</div></div></div>
+    </div>
+
+    <!-- Patient Attendance Table -->
+    <div class="card report-section">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-clipboard-list"></i> Patient Attendance — ${period}</span><span style="font-size:12px;color:var(--text-light)">${appointments.list ? appointments.list.length : 0} visit(s)</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Department</th><th>Reason</th><th>Status</th></tr></thead>
+          <tbody>
+            ${(appointments.list && appointments.list.length) ? appointments.list.map(a => `
+              <tr><td>${Fmt.date(a.date)}</td><td>${a.time || '—'}</td><td><strong>${a.patientName}</strong></td><td>${a.doctor}</td><td>${a.department || '—'}</td><td>${a.reason || '—'}</td><td>${Fmt.badge(a.status, statusBadge)}</td></tr>`).join('')
+            : '<tr><td colspan="7"><div class="empty-state"><p>No patient visits recorded this month</p></div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Patients Table -->
+    <div class="card report-section">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-users"></i> New Patients — ${period}</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Patient ID</th><th>Name</th><th>Age</th><th>Sex</th><th>Contact</th><th>Registered</th></tr></thead>
+          <tbody>
+            ${patients.list.length ? patients.list.map(p => `
+              <tr><td><code>${p.patientId}</code></td><td>${p.name}</td><td>${p.age}</td><td>${p.sex}</td><td>${p.contact}</td><td>${Fmt.date(p.createdAt)}</td></tr>`).join('')
+            : '<tr><td colspan="6"><div class="empty-state"><p>No new patients this month</p></div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Revenue Table -->
+    <div class="card report-section">
+      <div class="card-header"><span class="card-title">Revenue — ${period}</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Bill ID</th><th>Patient</th><th>Date</th><th>Total</th><th>Paid</th><th>Status</th></tr></thead>
+          <tbody>
+            ${billing.list.length ? billing.list.map(b => `
+              <tr><td><code>${b.billId}</code></td><td>${b.patientName}</td><td>${Fmt.date(b.createdAt)}</td><td>${Fmt.currency(b.total)}</td><td>${Fmt.currency(b.amountPaid||0)}</td><td>${Fmt.badge(b.paymentStatus, statusBadge)}</td></tr>`).join('')
+            : '<tr><td colspan="6"><div class="empty-state"><p>No billing records this month</p></div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Attendance Table -->
+    <div class="card report-section">
+      <div class="card-header"><span class="card-title">Attendance — ${period}</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Staff</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th></tr></thead>
+          <tbody>
+            ${attendance.list.length ? attendance.list.map(a => `
+              <tr><td>${a.staffName}</td><td>${a.date}</td><td>${a.checkIn||'—'}</td><td>${a.checkOut||'—'}</td><td>${a.hoursWorked||'—'}</td><td>${Fmt.badge(a.status, statusBadge)}</td></tr>`).join('')
+            : '<tr><td colspan="6"><div class="empty-state"><p>No attendance records this month</p></div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function printReport() {
+  if (!document.getElementById('report-content').querySelector('.card')) {
+    Toast.warning('Please generate a report first');
+    return;
+  }
+  window.print();
+}
+
+function csvEscape(val) {
+  const s = (val === null || val === undefined) ? '' : String(val);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadReportCSV() {
+  if (!currentReportData) {
+    Toast.warning('Please generate a report first');
+    return;
+  }
+  const { appointments, patients } = currentReportData;
+  const rows = [];
+  rows.push(['Patient Attendance Report', currentReportPeriod]);
+  rows.push([]);
+  rows.push(['Date', 'Time', 'Patient Name', 'Doctor', 'Department', 'Reason', 'Status']);
+  (appointments.list || []).forEach(a => {
+    rows.push([Fmt.date(a.date), a.time || '', a.patientName, a.doctor, a.department || '', a.reason || '', a.status]);
+  });
+  rows.push([]);
+  rows.push(['New Patients Registered', currentReportPeriod]);
+  rows.push([]);
+  rows.push(['Patient ID', 'Name', 'Age', 'Sex', 'Contact', 'Blood Group', 'Registered']);
+  (patients.list || []).forEach(p => {
+    rows.push([p.patientId, p.name, p.age, p.sex, p.contact, p.bloodGroup || '', Fmt.date(p.createdAt)]);
+  });
+
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `patient-attendance-${currentReportPeriod.replace(/\s+/g, '-')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  Toast.success('Patient attendance CSV downloaded');
+}
+</script>
+</body>
+</html>

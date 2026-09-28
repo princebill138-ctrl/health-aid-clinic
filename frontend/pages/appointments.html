@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Appointments — Health-Aid Clinic</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+        <div><div class="topbar-title">Appointments</div></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="topbar-date"></div>
+        <button class="btn btn-primary" onclick="openAdd()">+ Book Appointment</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon"></span>
+          <input type="text" class="form-control" id="search-input" placeholder="Search patient or doctor...">
+        </div>
+        <input type="date" class="form-control" id="date-filter" style="width:auto">
+        <select class="form-control" id="status-filter" style="width:auto">
+          <option value="">All Statuses</option>
+          <option>scheduled</option><option>completed</option><option>cancelled</option><option>no-show</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="clearFilters()">Clear</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Appointments</span><span id="appt-count" style="font-size:13px;color:var(--text-light)"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Department</th><th>Date</th><th>Time</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="appts-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="appt-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Book Appointment</span>
+      <button class="modal-close" onclick="Modal.close('appt-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="appt-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Patient Name <span class="req">*</span></label>
+            <input type="text" name="patientName" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Patient ID / DB ID</label>
+            <input type="text" name="patientId" class="form-control" placeholder="MongoDB ID of patient">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Doctor <span class="req">*</span></label>
+            <input type="text" name="doctor" class="form-control" required placeholder="Dr. Name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <select name="department" class="form-control">
+              <option value="">Select</option>
+              <option>General</option><option>Pediatrics</option><option>Maternity</option>
+              <option>Surgery</option><option>Dentistry</option><option>Eye Clinic</option>
+              <option>Laboratory</option><option>Pharmacy</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date <span class="req">*</span></label>
+            <input type="date" name="date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Time <span class="req">*</span></label>
+            <input type="time" name="time" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-control">
+              <option value="scheduled">Scheduled</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="no-show">No-show</option>
+            </select>
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label">Reason</label>
+            <input type="text" name="reason" class="form-control" placeholder="Purpose of visit">
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Modal.close('appt-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAppt()"> Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/sidebar.js"></script>
+<script src="/js/app.js"></script>
+<script>
+renderSidebar('appointments');
+let editId = null;
+
+async function loadAppts() {
+  const search = document.getElementById('search-input').value;
+  const date = document.getElementById('date-filter').value;
+  const status = document.getElementById('status-filter').value;
+  let url = `/appointments?search=${encodeURIComponent(search)}`;
+  if (date) url += `&date=${date}`;
+  if (status) url += `&status=${status}`;
+  try {
+    const appts = await API.get(url);
+    document.getElementById('appt-count').textContent = `${appts.length} records`;
+    const tbody = document.getElementById('appts-table');
+    if (!appts.length) {
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon"><i class="fa-solid fa-calendar-days"></i></div><h3>No appointments found</h3></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = appts.map(a => `
+      <tr>
+        <td><code>${a.appointmentId}</code></td>
+        <td><strong>${a.patientName}</strong></td>
+        <td>Dr. ${a.doctor}</td>
+        <td>${a.department || '—'}</td>
+        <td>${Fmt.date(a.date)}</td>
+        <td>${a.time}</td>
+        <td>${a.reason || '—'}</td>
+        <td>${Fmt.badge(a.status, statusBadge)}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editAppt('${a._id}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAppt('${a._id}')"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { Toast.error('Failed to load appointments'); }
+}
+
+function openAdd() {
+  editId = null;
+  document.getElementById('modal-title').textContent = 'Book Appointment';
+  document.getElementById('appt-form').reset();
+  Modal.open('appt-modal');
+}
+
+async function editAppt(id) {
+  try {
+    const appts = await API.get('/appointments');
+    const a = appts.find(x => x._id === id);
+    if (!a) return;
+    editId = id;
+    document.getElementById('modal-title').textContent = 'Edit Appointment';
+    fillForm(document.getElementById('appt-form'), a);
+    Modal.open('appt-modal');
+  } catch(e) { Toast.error('Failed to load appointment'); }
+}
+
+async function saveAppt() {
+  const form = document.getElementById('appt-form');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  const data = getFormData(form);
+  if (!data.patientId || !data.patientId.match(/^[a-f0-9]{24}$/i)) {
+    data.patientId = '000000000000000000000000'; // placeholder
+  }
+  try {
+    if (editId) { await API.put(`/appointments/${editId}`, data); Toast.success('Appointment updated'); }
+    else { await API.post('/appointments', data); Toast.success('Appointment booked'); }
+    Modal.close('appt-modal');
+    loadAppts();
+  } catch(e) { Toast.error(e.message); }
+}
+
+async function deleteAppt(id) {
+  if (!window.confirm('Cancel and delete this appointment?')) return;
+  try { await API.delete(`/appointments/${id}`); Toast.success('Deleted'); loadAppts(); }
+  catch(e) { Toast.error(e.message); }
+}
+
+function clearFilters() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('date-filter').value = '';
+  document.getElementById('status-filter').value = '';
+  loadAppts();
+}
+
+['search-input','date-filter','status-filter'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', loadAppts);
+  document.getElementById(id)?.addEventListener('change', loadAppts);
+});
+loadAppts();
+</script>
+</body>
+</html>

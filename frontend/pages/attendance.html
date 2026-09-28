@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance — Health-Aid Clinic</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+        <div><div class="topbar-title">Staff Attendance</div></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="topbar-date"></div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- My Attendance Card -->
+      <div class="card" style="margin-bottom:22px">
+        <div class="card-header"><span class="card-title"> My Attendance Today</span></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div id="my-status" style="flex:1;min-width:200px">
+              <div style="font-size:13px;color:var(--text-light)">Status</div>
+              <div style="font-size:16px;font-weight:600" id="today-status">Loading...</div>
+            </div>
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:13px;color:var(--text-light)">Check-In</div>
+              <div style="font-size:16px;font-weight:600" id="today-checkin">—</div>
+            </div>
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:13px;color:var(--text-light)">Check-Out</div>
+              <div style="font-size:16px;font-weight:600" id="today-checkout">—</div>
+            </div>
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:13px;color:var(--text-light)">Hours Worked</div>
+              <div style="font-size:16px;font-weight:600" id="today-hours">—</div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-success" id="btn-checkin" onclick="checkIn()"> Check In</button>
+              <button class="btn btn-danger" id="btn-checkout" onclick="checkOut()" disabled>Check Out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="toolbar">
+        <select class="form-control" id="month-filter" style="width:auto">
+          <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+          <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+          <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+        </select>
+        <select class="form-control" id="year-filter" style="width:auto"></select>
+        <button class="btn btn-secondary" onclick="loadAttendance()"> Load</button>
+        <button class="btn btn-outline" onclick="window.print()">Print</button>
+        <button class="btn btn-primary" onclick="Modal.open('add-modal')" data-admin-only>+ Add Record</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Attendance Records</span>
+          <div id="att-summary" style="font-size:13px;color:var(--text-light)"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Staff Name</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Status</th><th>Notes</th></tr></thead>
+            <tbody id="att-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Attendance Modal (Admin) -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Attendance Record</span>
+      <button class="modal-close" onclick="Modal.close('add-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="att-form">
+        <div class="form-group">
+          <label class="form-label">Staff</label>
+          <select name="staffId" class="form-control" id="staff-select" required>
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input type="date" name="date" class="form-control" required>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Check In</label>
+            <input type="time" name="checkIn" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Check Out</label>
+            <input type="time" name="checkOut" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-control">
+            <option value="present">Present</option><option value="absent">Absent</option>
+            <option value="late">Late</option><option value="half-day">Half Day</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <input type="text" name="notes" class="form-control">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Modal.close('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAttendance()"> Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/sidebar.js"></script>
+<script src="/js/app.js"></script>
+<script>
+renderSidebar('attendance');
+
+// Populate year select
+const yearSel = document.getElementById('year-filter');
+const now = new Date();
+for (let y = now.getFullYear(); y >= 2023; y--) {
+  const opt = document.createElement('option');
+  opt.value = y; opt.textContent = y;
+  if (y === now.getFullYear()) opt.selected = true;
+  yearSel.appendChild(opt);
+}
+document.getElementById('month-filter').value = now.getMonth() + 1;
+
+async function loadTodayStatus() {
+  const user = Auth.getUser();
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const records = await API.get(`/attendance?date=${today}&staffId=${user.id}`);
+    const rec = records[0];
+    if (rec) {
+      document.getElementById('today-status').innerHTML = Fmt.badge(rec.status, statusBadge);
+      document.getElementById('today-checkin').textContent = rec.checkIn || '—';
+      document.getElementById('today-checkout').textContent = rec.checkOut || '—';
+      document.getElementById('today-hours').textContent = rec.hoursWorked ? rec.hoursWorked + ' hrs' : '—';
+      document.getElementById('btn-checkin').disabled = true;
+      document.getElementById('btn-checkout').disabled = !!rec.checkOut;
+    } else {
+      document.getElementById('today-status').textContent = 'Not checked in';
+      document.getElementById('btn-checkout').disabled = true;
+    }
+  } catch(e) {
+    document.getElementById('today-status').textContent = 'Not checked in';
+  }
+}
+
+async function checkIn() {
+  try {
+    await API.post('/attendance/checkin', {});
+    Toast.success('Checked in successfully!');
+    loadTodayStatus();
+  } catch(e) { Toast.error(e.message); }
+}
+
+async function checkOut() {
+  try {
+    await API.post('/attendance/checkout', {});
+    Toast.success('Checked out successfully!');
+    loadTodayStatus();
+  } catch(e) { Toast.error(e.message); }
+}
+
+async function loadAttendance() {
+  const month = document.getElementById('month-filter').value;
+  const year = document.getElementById('year-filter').value;
+  try {
+    const records = await API.get(`/attendance?month=${month}&year=${year}`);
+    const present = records.filter(r => r.status === 'present').length;
+    const absent = records.filter(r => r.status === 'absent').length;
+    document.getElementById('att-summary').textContent = `${records.length} records | Present: ${present} | Absent: ${absent}`;
+    const tbody = document.getElementById('att-table');
+    if (!records.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon"></div><h3>No records for this period</h3></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td><strong>${r.staffId?.fullName || r.staffName}</strong>
+          ${r.staffId?.department ? `<div style="font-size:11px;color:var(--text-light)">${r.staffId.department}</div>` : ''}
+        </td>
+        <td>${r.date}</td>
+        <td>${r.checkIn || '—'}</td>
+        <td>${r.checkOut || '—'}</td>
+        <td>${r.hoursWorked ? r.hoursWorked + ' hrs' : '—'}</td>
+        <td>${Fmt.badge(r.status, statusBadge)}</td>
+        <td>${r.notes || '—'}</td>
+      </tr>`).join('');
+  } catch(e) { Toast.error('Failed to load attendance'); }
+}
+
+// Load staff for dropdown
+async function loadStaff() {
+  try {
+    const staff = await API.get('/staff');
+    const sel = document.getElementById('staff-select');
+    sel.innerHTML = staff.map(s => `<option value="${s._id}">${s.fullName} (${s.role})</option>`).join('');
+  } catch(e) {}
+}
+
+async function saveAttendance() {
+  const form = document.getElementById('att-form');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  const data = getFormData(form);
+  const sel = document.getElementById('staff-select');
+  data.staffName = sel.options[sel.selectedIndex]?.text?.split(' (')[0] || '';
+  try {
+    await API.post('/attendance', data);
+    Toast.success('Record added');
+    Modal.close('add-modal');
+    loadAttendance();
+  } catch(e) { Toast.error(e.message); }
+}
+
+loadTodayStatus();
+loadAttendance();
+if (Auth.isAdmin()) loadStaff();
+</script>
+</body>
+</html>

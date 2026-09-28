@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staff — Health-Aid Clinic</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+        <div><div class="topbar-title">Staff Management</div></div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="topbar-date"></div>
+        <button class="btn btn-primary" onclick="openAdd()">+ Add Staff</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="card">
+        <div class="card-header"><span class="card-title">All Staff</span><span id="staff-count" style="font-size:13px;color:var(--text-light)"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Department</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="staff-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="staff-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Add Staff</span>
+      <button class="modal-close" onclick="Modal.close('staff-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="staff-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Full Name <span class="req">*</span></label>
+            <input type="text" name="fullName" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Username <span class="req">*</span></label>
+            <input type="text" name="username" class="form-control" required autocomplete="off">
+          </div>
+          <div class="form-group" id="password-group">
+            <label class="form-label">Password <span class="req">*</span></label>
+            <input type="password" name="password" class="form-control" id="password-field" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role <span class="req">*</span></label>
+            <select name="role" class="form-control" required>
+              <option value="staff">Staff</option><option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <select name="department" class="form-control">
+              <option value="">Select</option>
+              <option>Administration</option><option>General</option><option>Pediatrics</option>
+              <option>Maternity</option><option>Surgery</option><option>Pharmacy</option>
+              <option>Laboratory</option><option>Nursing</option><option>Reception</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" name="phone" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Active</label>
+            <select name="active" class="form-control">
+              <option value="true">Active</option><option value="false">Inactive</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Modal.close('staff-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStaff()"> Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/sidebar.js"></script>
+<script src="/js/app.js"></script>
+<script>
+renderSidebar('staff');
+
+// Redirect non-admins
+if (!Auth.isAdmin()) {
+  Toast.error('Admin access only');
+  setTimeout(() => window.location.href = '/pages/dashboard.html', 1500);
+}
+
+let editId = null;
+
+async function loadStaff() {
+  try {
+    const staff = await API.get('/staff');
+    document.getElementById('staff-count').textContent = `${staff.length} staff`;
+    const tbody = document.getElementById('staff-table');
+    if (!staff.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon"><i class="fa-solid fa-users"></i></div><h3>No staff found</h3></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = staff.map(s => `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--brown-pale);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--brown-mid)">
+              ${s.fullName.charAt(0).toUpperCase()}
+            </div>
+            <strong>${s.fullName}</strong>
+          </div>
+        </td>
+        <td><code>${s.username}</code></td>
+        <td><span class="badge ${s.role === 'admin' ? 'badge-warning' : 'badge-info'}">${s.role}</span></td>
+        <td>${s.department || '—'}</td>
+        <td>${s.email || '—'}</td>
+        <td>${s.phone || '—'}</td>
+        <td><span class="badge ${s.active ? 'badge-success' : 'badge-danger'}">${s.active ? 'Active' : 'Inactive'}</span></td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editStaff('${s._id}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteStaff('${s._id}','${s.fullName}')"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { Toast.error('Failed to load staff'); }
+}
+
+function openAdd() {
+  editId = null;
+  document.getElementById('modal-title').textContent = 'Add Staff';
+  document.getElementById('staff-form').reset();
+  document.getElementById('password-field').required = true;
+  document.getElementById('password-group').querySelector('.form-label').innerHTML = 'Password <span class="req">*</span>';
+  Modal.open('staff-modal');
+}
+
+async function editStaff(id) {
+  try {
+    const staff = await API.get('/staff');
+    const s = staff.find(x => x._id === id);
+    if (!s) return;
+    editId = id;
+    document.getElementById('modal-title').textContent = 'Edit Staff';
+    fillForm(document.getElementById('staff-form'), s);
+    document.getElementById('password-field').value = '';
+    document.getElementById('password-field').required = false;
+    document.getElementById('password-group').querySelector('.form-label').innerHTML = 'Password <small style="color:var(--text-light)">(leave blank to keep)</small>';
+    Modal.open('staff-modal');
+  } catch(e) { Toast.error('Failed to load staff'); }
+}
+
+async function saveStaff() {
+  const form = document.getElementById('staff-form');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  const data = getFormData(form);
+  data.active = data.active === 'true';
+  if (!data.password) delete data.password;
+  try {
+    if (editId) { await API.put(`/staff/${editId}`, data); Toast.success('Staff updated'); }
+    else { await API.post('/staff', data); Toast.success('Staff added'); }
+    Modal.close('staff-modal');
+    loadStaff();
+  } catch(e) { Toast.error(e.message); }
+}
+
+async function deleteStaff(id, name) {
+  const me = Auth.getUser();
+  if (me.id === id) { Toast.error("You can't delete yourself"); return; }
+  if (!window.confirm(`Delete staff member "${name}"?`)) return;
+  try { await API.delete(`/staff/${id}`); Toast.success('Deleted'); loadStaff(); }
+  catch(e) { Toast.error(e.message); }
+}
+
+loadStaff();
+</script>
+</body>
+</html>
