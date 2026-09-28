@@ -66,21 +66,54 @@ const deriveStatus = (reqDoc) => {
 router.get('/stats', protect, async (req, res) => {
   try {
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-    const [pending, inProgress, completedToday, reagents, requests] = await Promise.all([
+    const [pending, inProgress, completedToday, reagents, requests, pendingInvestigations] = await Promise.all([
       LabRequest.countDocuments({ status: { $in: ['pending', 'sample-collected'] } }),
       LabRequest.countDocuments({ status: 'in-progress' }),
       LabRequest.countDocuments({ status: 'completed', completedAt: { $gte: startOfDay } }),
       LabReagent.find(),
-      LabRequest.find({ 'tests.result.flag': { $in: ['Critical Low', 'Critical High'] } })
+      LabRequest.find({ 'tests.result.flag': { $in: ['Critical Low', 'Critical High'] } }),
+      countPendingInvestigations()
     ]);
     let criticalOpen = 0;
     requests.forEach(r => r.tests.forEach(t => {
       if (['Critical Low', 'Critical High'].includes(t.result?.flag) && !t.result.acknowledged) criticalOpen++;
     }));
     res.json({
-      pending, inProgress, completedToday, criticalOpen,
+      pending, inProgress, completedToday, criticalOpen, pendingInvestigations,
       lowReagents: reagents.filter(r => r.quantity <= r.lowStockThreshold).length
     });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// ── PATIENTS WITH LAB INVESTIGATIONS NOTED IN THEIR CLINICAL RECORD ──
+// Surfaces patients whose Patient-record "Lab Investigations" clinical note
+// has not yet been turned into a formal Laboratory test request, so lab
+// staff can pick them up here instead of them going unnoticed.
+async function countPendingInvestigations() {
+  const patients = await Patient.find({ active: true, 'clinicalNotes.lab': { $exists: true, $ne: '' } }).select('_id');
+  if (!patients.length) return 0;
+  const openPatientIds = new Set((await LabRequest.find({ status: { $nin: ['completed', 'cancelled'] } }).select('patient')).map(r => String(r.patient)));
+  return patients.filter(p => !openPatientIds.has(String(p._id))).length;
+}
+
+router.get('/pending-investigations', protect, async (req, res) => {
+  try {
+    const { search } = req.query;
+    const q = { active: true, 'clinicalNotes.lab': { $exists: true, $ne: '' } };
+    if (search) q.$or = [{ name: rx(search) }, { patientId: rx(search) }, { contact: rx(search) }];
+    const patients = await Patient.find(q).select('patientId name age sex contact clinicalNotes').sort({ updatedAt: -1 }).limit(200);
+    const openReqs = await LabRequest.find({ status: { $nin: ['completed', 'cancelled'] } }).select('patient requestId');
+    const openMap = new Map(openReqs.map(r => [String(r.patient), r.requestId]));
+    const list = patients.map(p => {
+      const notes = (p.clinicalNotes || []).filter(n => n.lab && n.lab.trim()).sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+      const latest = notes[0];
+      return {
+        _id: p._id, patientId: p.patientId, name: p.name, age: p.age, sex: p.sex, contact: p.contact,
+        latestLabNote: latest?.lab || '', latestNoteDate: latest?.savedAt,
+        openRequestId: openMap.get(String(p._id)) || null
+      };
+    });
+    res.json(list);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

@@ -61,10 +61,13 @@
         <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-circle-check"></i></div><div class="stat-info"><div class="label">Completed Today</div><div class="value" id="s-done">—</div></div></div>
         <div class="stat-card"><div class="stat-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="stat-info"><div class="label">Critical Alerts</div><div class="value" id="s-critical">—</div></div></div>
         <div class="stat-card"><div class="stat-icon brown"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-info"><div class="label">Low Reagents</div><div class="value" id="s-reagent">—</div></div></div>
+        <div class="stat-card" style="cursor:pointer" onclick="switchTab('investigations')"><div class="stat-icon blue"><i class="fa-solid fa-notes-medical"></i></div><div class="stat-info"><div class="label">Pending Investigations</div><div class="value" id="s-investigations">—</div></div></div>
       </div>
+      <div id="investigations-banner"></div>
 
       <div class="lab-tabs" id="lab-tabs">
         <button class="lab-tab active" data-tab="requests">Test Requests</button>
+        <button class="lab-tab" data-tab="investigations">Patient Investigations</button>
         <button class="lab-tab" data-tab="samples">Patient Samples</button>
         <button class="lab-tab" data-tab="alerts">Results &amp; Alerts</button>
         <button class="lab-tab" data-tab="tests">Laboratory Tests</button>
@@ -94,6 +97,27 @@
           <div class="table-wrap"><table>
             <thead><tr><th>Request ID</th><th>Patient</th><th>Tests</th><th>Priority</th><th>Requested</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody id="rq-table"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- PATIENT INVESTIGATIONS (from Patient Records) -->
+      <div class="lab-panel" id="panel-investigations">
+        <div class="toolbar">
+          <div class="search-wrap">
+            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" class="form-control" id="iv-search" placeholder="Search patient name, ID or contact...">
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-light);margin:-6px 0 14px">
+          Patients whose Patient Record has a "Lab Investigations" note from a clinician. Turn a note into a formal, trackable test request here,
+          or register a brand-new patient who needs a lab test straight away.
+        </p>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Patients With Noted Investigations</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Patient</th><th>Age / Sex</th><th>Contact</th><th>Lab Investigations Note</th><th>Noted On</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="iv-table"></tbody>
           </table></div>
         </div>
       </div>
@@ -210,7 +234,8 @@
       <form id="request-form" onsubmit="return false">
         <div class="form-grid">
           <div class="form-group col-span-2">
-            <label class="form-label">Patient <span class="req">*</span></label>
+            <label class="form-label">Patient <span class="req">*</span>
+              <button type="button" class="btn btn-sm btn-outline" style="float:right" onclick="openPatientQuickAdd('request')">+ Add New Patient</button></label>
             <select name="patient" class="form-control" id="rq-patient" required><option value="">Select patient...</option></select>
           </div>
           <div class="form-group">
@@ -485,6 +510,44 @@
   </div>
 </div>
 
+<!-- QUICK-ADD PATIENT MODAL -->
+<div class="modal-overlay" id="patient-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Register New Patient</span><button class="modal-close" onclick="Modal.close('patient-modal')">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">Creates a full patient record (same as Patient Records) so this person can be selected for lab test requests.</p>
+      <form id="patient-form" onsubmit="return false">
+        <div class="form-grid">
+          <div class="form-group col-span-2">
+            <label class="form-label">Full Name <span class="req">*</span></label>
+            <input type="text" name="name" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Age <span class="req">*</span></label>
+            <input type="number" name="age" class="form-control" min="0" max="150" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sex <span class="req">*</span></label>
+            <select name="sex" class="form-control" required><option value="">Select...</option><option>Male</option><option>Female</option><option>Other</option></select>
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label">Contact Number <span class="req">*</span></label>
+            <input type="text" name="contact" class="form-control" required placeholder="e.g. 024xxxxxxx">
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label">Address</label>
+            <input type="text" name="address" class="form-control">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Modal.close('patient-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePatientQuickAdd()">Register &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
 <!-- STOCK MODAL (restock / use) -->
 <div class="modal-overlay" id="stock-modal">
   <div class="modal" style="max-width:360px">
@@ -509,11 +572,12 @@
 renderSidebar('laboratory');
 
 // ── STATE ──
-const S = { tests: [], categories: [], patients: [], requests: [], samples: [], reagents: [], alerts: [], tab: 'requests' };
+const S = { tests: [], categories: [], patients: [], requests: [], samples: [], reagents: [], alerts: [], investigations: [], tab: 'requests' };
 const SAMPLE_TYPES = ['Blood', 'Blood (EDTA)', 'Blood (Fluoride)', 'Serum', 'Plasma', 'Urine', 'Stool', 'Sputum', 'Swab', 'CSF', 'Other'];
-let current = { request: null, test: null, category: null, reagent: null, sample: null, stockMode: 'restock', stockId: null, reportRequest: null };
+let current = { request: null, test: null, category: null, reagent: null, sample: null, stockMode: 'restock', stockId: null, reportRequest: null, patientQuickAddFor: null };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const jsAttr = (v) => esc(JSON.stringify(v)); // safe to drop into a single-quoted inline onclick="" attribute
 const debounce = (fn, ms = 300) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const $ = (id) => document.getElementById(id);
 const emptyRow = (cols, msg) => `<tr><td colspan="${cols}"><div class="empty-state"><div class="icon"></div><h3>${msg}</h3></div></td></tr>`;
@@ -558,12 +622,13 @@ const testById = (id) => S.tests.find(t => t._id === id);
 
 // ── TABS ──
 const ACTIONS = {
-  requests:   ['+ New Test Request', () => openRequest()],
-  samples:    ['+ Collect Sample',   () => openSample()],
-  alerts:     ['Refresh Alerts',     () => { loadAlerts(); loadStats(); }],
-  tests:      ['+ Add Test',         () => openTest()],
-  categories: ['+ Add Category',     () => openCategory()],
-  reagents:   ['+ Add Reagent',      () => openReagent()]
+  requests:       ['+ New Test Request',      () => openRequest()],
+  investigations: ['+ Register New Patient',  () => openPatientQuickAdd('investigations')],
+  samples:        ['+ Collect Sample',        () => openSample()],
+  alerts:         ['Refresh Alerts',          () => { loadAlerts(); loadStats(); }],
+  tests:          ['+ Add Test',              () => openTest()],
+  categories:     ['+ Add Category',          () => openCategory()],
+  reagents:       ['+ Add Reagent',           () => openReagent()]
 };
 function primaryAction() { ACTIONS[S.tab][1](); }
 function switchTab(tab) {
@@ -571,7 +636,7 @@ function switchTab(tab) {
   document.querySelectorAll('.lab-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.lab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
   $('primary-action').textContent = ACTIONS[tab][0];
-  ({ requests: loadRequests, samples: loadSamples, alerts: loadAlerts, tests: loadTests, categories: loadCategories, reagents: loadReagents })[tab]();
+  ({ requests: loadRequests, investigations: loadInvestigations, samples: loadSamples, alerts: loadAlerts, tests: loadTests, categories: loadCategories, reagents: loadReagents })[tab]();
 }
 $('lab-tabs').addEventListener('click', e => { const b = e.target.closest('.lab-tab'); if (b) switchTab(b.dataset.tab); });
 
@@ -581,11 +646,55 @@ async function loadStats() {
     const s = await API.get('/laboratory/stats');
     $('s-pending').textContent = s.pending; $('s-progress').textContent = s.inProgress;
     $('s-done').textContent = s.completedToday; $('s-critical').textContent = s.criticalOpen; $('s-reagent').textContent = s.lowReagents;
+    $('s-investigations').textContent = s.pendingInvestigations;
     $('critical-banner').innerHTML = s.criticalOpen ? `<div class="alert alert-danger" style="margin-bottom:18px;cursor:pointer" onclick="showCritical()">
       <i class="fa-solid fa-triangle-exclamation"></i> <strong>${s.criticalOpen} critical result${s.criticalOpen > 1 ? 's' : ''}</strong> awaiting acknowledgement. Click to review.</div>` : '';
+    $('investigations-banner').innerHTML = s.pendingInvestigations ? `<div class="alert alert-warning" style="margin-bottom:18px;cursor:pointer" onclick="switchTab('investigations')">
+      <i class="fa-solid fa-notes-medical"></i> <strong>${s.pendingInvestigations} patient${s.pendingInvestigations > 1 ? 's' : ''}</strong> from Patient Records ${s.pendingInvestigations > 1 ? 'have' : 'has'} noted lab investigations with no test request yet. Click to review.</div>` : '';
   } catch (e) { /* stats are non-blocking */ }
 }
 function showCritical() { $('al-level').value = 'critical'; $('al-ack').value = 'false'; switchTab('alerts'); }
+
+// ══════════ PATIENT INVESTIGATIONS (from Patient Records) ══════════
+async function loadInvestigations() {
+  try {
+    S.investigations = await API.get('/laboratory/pending-investigations?' + qs({ search: $('iv-search').value }));
+    $('iv-table').innerHTML = !S.investigations.length ? emptyRow(7, 'No patients with pending lab investigations') : S.investigations.map(p => `<tr>
+      <td><strong>${esc(p.name)}</strong><div style="font-size:12px;color:var(--text-light)">${esc(p.patientId)}</div></td>
+      <td>${esc(p.age)}y ${esc(p.sex)}</td><td>${esc(p.contact) || '—'}</td>
+      <td style="max-width:260px;white-space:pre-wrap;font-size:12.5px">${esc(p.latestLabNote)}</td>
+      <td>${p.latestNoteDate ? Fmt.datetime(p.latestNoteDate) : '—'}</td>
+      <td>${p.openRequestId ? `<span class="badge badge-info">Requested — ${esc(p.openRequestId)}</span>` : '<span class="badge badge-warning">Not requested</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-primary" onclick='openRequest(${jsAttr(p._id)}, ${jsAttr(p.latestLabNote)})'><i class="fa-solid fa-flask"></i> Create Request</button>
+      </td></tr>`).join('');
+  } catch (e) { Toast.error('Failed to load patient investigations'); }
+}
+
+// ══════════ QUICK-ADD PATIENT (from Laboratory) ══════════
+function openPatientQuickAdd(returnTo) {
+  current.patientQuickAddFor = returnTo || null;
+  $('patient-form').reset();
+  Modal.open('patient-modal');
+}
+async function savePatientQuickAdd() {
+  const form = $('patient-form');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  try {
+    const patient = await API.post('/patients', getFormData(form));
+    Toast.success(`Patient ${patient.name} registered`);
+    S.patients.push(patient);
+    Modal.close('patient-modal');
+    if (current.patientQuickAddFor === 'request') {
+      // Request modal is open behind this one — just add & select the new patient in it.
+      const opt = new Option(`${patient.name} — ${patient.patientId} (${patient.age}y ${patient.sex})`, patient._id, true, true);
+      $('rq-patient').add(opt);
+    } else {
+      // Registered from the toolbar (no request open yet) — go straight into creating their request.
+      await openRequest(patient._id);
+    }
+  } catch (e) { Toast.error(e.message); }
+}
 
 // ── REFERENCE DATA ──
 async function loadRefData() {
@@ -634,11 +743,19 @@ async function loadRequests() {
   } catch (e) { Toast.error('Failed to load requests'); }
 }
 
-async function openRequest() {
+async function openRequest(presetPatientId, presetNotes) {
   await Promise.all([loadPatients(), S.tests.length ? null : loadRefData()]);
+  // A patient just registered here (quick-add) or one already loaded won't yet be
+  // in the cached list fetched by loadPatients() if it was created after that cache
+  // was filled — make sure the preset patient is always selectable.
+  if (presetPatientId && !S.patients.some(p => p._id === presetPatientId)) {
+    try { S.patients.push(await API.get(`/patients/${presetPatientId}`)); } catch (e) {}
+  }
   $('request-form').reset();
   $('rq-patient').innerHTML = '<option value="">Select patient...</option>' +
     S.patients.map(p => `<option value="${p._id}">${esc(p.name)} — ${esc(p.patientId)} (${esc(p.age)}y ${esc(p.sex)})</option>`).join('');
+  if (presetPatientId) $('rq-patient').value = presetPatientId;
+  if (presetNotes) $('request-form').elements.clinicalNotes.value = presetNotes;
   $('rq-test-filter').value = '';
   renderTestPicker();
   Modal.open('request-modal');
@@ -1081,6 +1198,7 @@ async function confirmStock() {
 // ── SEARCH / FILTER WIRING ──
 const wire = (ids, fn, ev) => ids.forEach(id => $(id).addEventListener(ev, ev === 'input' ? debounce(fn) : fn));
 wire(['rq-search'], loadRequests, 'input'); wire(['rq-status', 'rq-priority', 'rq-from', 'rq-to'], loadRequests, 'change');
+wire(['iv-search'], loadInvestigations, 'input');
 wire(['sm-search'], loadSamples, 'input'); wire(['sm-status', 'sm-type'], loadSamples, 'change');
 wire(['al-search'], loadAlerts, 'input'); wire(['al-level', 'al-ack'], loadAlerts, 'change');
 wire(['ts-search'], loadTests, 'input'); wire(['ts-category'], loadTests, 'change');
