@@ -441,39 +441,116 @@ router.get('/patient-records/:patientId', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// Shared by the per-patient endpoint and the Laboratory page's "Add Lab Test".
+// snapshot = { patient?, patientId, patientName, age, sex, address }
+async function createLabRecord(req, snapshot, body) {
+  const { testType, category, result, treatment, notes, date, address } = body;
+  if (!String(testType || '').trim()) throw new Error('Select the test / investigation type');
+  if (!String(result || '').trim()) throw new Error('Enter the test result');
+
+  // If the test exists in the catalogue, flag the result against its reference range
+  const def = await LabTest.findOne({ name: new RegExp(`^${String(testType).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+  const ev = def ? evaluate(def, snapshot.age, snapshot.sex, String(result).trim()) : { flag: '', referenceText: '' };
+  const when = date ? new Date(`${String(date).slice(0, 10)}T12:00:00`) : new Date();
+  const testDate = isNaN(when.getTime()) ? new Date() : when;
+  const { address: snapAddress, ...snap } = snapshot;
+
+  return LabRequest.create({
+    requestId: await nextId(LabRequest, 'requestId', 'LAB', 5),
+    ...snap,
+    address: String(address ?? snapAddress ?? '').trim(),
+    treatment: String(treatment || '').trim(),
+    clinicalNotes: String(notes || '').trim(),
+    requestedByName: userName(req),
+    status: 'completed', completedAt: testDate, testDate,
+    tests: [{
+      test: def?._id, testName: String(testType).trim(), category: category || def?.category || '',
+      status: 'completed',
+      result: {
+        value: String(result).trim(), unit: def?.unit || '', flag: ev.flag, referenceText: ev.referenceText,
+        remarks: String(notes || '').trim(), enteredBy: userName(req), enteredAt: new Date()
+      }
+    }],
+    createdBy: req.user._id
+  });
+}
+
 router.post('/patient-records/:patientId', protect, async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.patientId);
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
-    const { testType, category, result, treatment, notes, date, address } = req.body;
-    if (!String(testType || '').trim()) return res.status(400).json({ message: 'Select the test / investigation type' });
-    if (!String(result || '').trim()) return res.status(400).json({ message: 'Enter the test result' });
-
-    // If the test exists in the catalogue, flag the result against its reference range
-    const def = await LabTest.findOne({ name: new RegExp(`^${String(testType).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-    const ev = def ? evaluate(def, patient.age, patient.sex, String(result).trim()) : { flag: '', referenceText: '' };
-    const when = date ? new Date(`${String(date).slice(0, 10)}T12:00:00`) : new Date();
-    const testDate = isNaN(when.getTime()) ? new Date() : when;
-
-    const doc = await LabRequest.create({
-      requestId: await nextId(LabRequest, 'requestId', 'LAB', 5),
-      patient: patient._id, patientId: patient.patientId, patientName: patient.name, age: patient.age, sex: patient.sex,
-      address: String(address ?? patient.address ?? '').trim(),
-      treatment: String(treatment || '').trim(),
-      clinicalNotes: String(notes || '').trim(),
-      requestedByName: userName(req),
-      status: 'completed', completedAt: testDate, testDate,
-      tests: [{
-        test: def?._id, testName: String(testType).trim(), category: category || def?.category || '',
-        status: 'completed',
-        result: {
-          value: String(result).trim(), unit: def?.unit || '', flag: ev.flag, referenceText: ev.referenceText,
-          remarks: String(notes || '').trim(), enteredBy: userName(req), enteredAt: new Date()
-        }
-      }],
-      createdBy: req.user._id
-    });
+    const doc = await createLabRecord(req, {
+      patient: patient._id, patientId: patient.patientId, patientName: patient.name,
+      age: patient.age, sex: patient.sex, address: patient.address
+    }, req.body);
     res.status(201).json(doc);
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
+// ── ALL LABORATORY RECORDS (simple Laboratory page) ──
+// Includes registered patients AND lab-only (walk-in) patients. Walk-ins live in
+// their own collection and never appear in Patient Records.
+router.get('/records', protect, async (req, res) => {
+  try {
+    const { search } = req.query;
+    const q = { status: { $ne: 'cancelled' } };
+    if (search) q.$or = [{ patientName: rx(search) }, { patientId: rx(search) }, { 'tests.testName': rx(search) }, { address: rx(search) }];
+    const reqs = await LabRequest.find(q).limit(1000);
+
+    // Fill in addresses for older requests that pre-date the address field
+    const missing = reqs.filter(r => !r.address);
+    const pats = await Patient.find({ _id: { $in: missing.filter(r => r.patient).map(r => r.patient) } }).select('address');
+    const wis = await LabPatient.find({ walkInId: { $in: missing.filter(r => !r.patient).map(r => r.patientId) } }).select('walkInId address');
+    const addrById = new Map([...pats.map(p => [String(p._id), p.address]), ...wis.map(w => [w.walkInId, w.address])]);
+
+    const records = [];
+    reqs.forEach(r => r.tests.forEach(t => records.push({
+      _id: `${r._id}_${t._id}`, requestId: r.requestId,
+      patientId: r.patientId, patientName: r.patientName, labOnly: !r.patient,
+      address: r.address || addrById.get(r.patient ? String(r.patient) : r.patientId) || '',
+      testType: t.testName, category: t.category || '',
+      result: t.result?.value || '', unit: t.result?.unit || '', flag: t.result?.flag || '',
+      treatment: r.treatment || '', notes: t.result?.remarks || r.clinicalNotes || '',
+      date: recordDate(r)
+    })));
+    records.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json(records);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// Add a lab test for: a registered patient (`patient`), an existing lab-only
+// patient (`walkInPatient`), or a brand-new lab-only patient (`newPatient`).
+router.post('/records', protect, async (req, res) => {
+  try {
+    const { patient: patientMongoId, walkInPatient: walkInMongoId, newPatient, ...body } = req.body;
+    let snapshot;
+    if (patientMongoId) {
+      const p = await Patient.findById(patientMongoId);
+      if (!p) return res.status(400).json({ message: 'Select a valid patient' });
+      snapshot = { patient: p._id, patientId: p.patientId, patientName: p.name, age: p.age, sex: p.sex, address: p.address };
+    } else if (walkInMongoId) {
+      const w = await LabPatient.findById(walkInMongoId);
+      if (!w) return res.status(400).json({ message: 'Select a valid patient' });
+      snapshot = { patientId: w.walkInId, patientName: w.name, age: w.age, sex: w.sex, address: w.address };
+    } else if (newPatient) {
+      const name = String(newPatient.name || '').trim();
+      if (!name) return res.status(400).json({ message: 'Enter the patient name' });
+      if (newPatient.age === '' || newPatient.age == null || isNaN(Number(newPatient.age))) return res.status(400).json({ message: 'Enter the patient age' });
+      if (!['Male', 'Female', 'Other'].includes(newPatient.sex)) return res.status(400).json({ message: 'Select the patient sex' });
+      // Validate the test BEFORE creating the lab-only patient, so a bad form leaves nothing behind
+      if (!String(body.testType || '').trim()) return res.status(400).json({ message: 'Select the test / investigation type' });
+      if (!String(body.result || '').trim()) return res.status(400).json({ message: 'Enter the test result' });
+      const w = await LabPatient.create({
+        walkInId: await nextId(LabPatient, 'walkInId', 'LWI', 5),
+        name, age: Number(newPatient.age), sex: newPatient.sex,
+        address: String(newPatient.address || '').trim(), contact: String(newPatient.contact || '').trim(),
+        addedBy: req.user._id
+      });
+      snapshot = { patientId: w.walkInId, patientName: w.name, age: w.age, sex: w.sex, address: w.address };
+    } else {
+      return res.status(400).json({ message: 'Select a patient' });
+    }
+    res.status(201).json(await createLabRecord(req, snapshot, body));
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 

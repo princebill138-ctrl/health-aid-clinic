@@ -5,36 +5,11 @@
   <title>Laboratory — Health-Aid Clinic</title>
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    .lab-tabs { display:flex; gap:4px; border-bottom:2px solid var(--brown-pale); margin-bottom:18px; overflow-x:auto; }
-    .lab-tab { padding:10px 16px; cursor:pointer; font-size:13.5px; font-weight:500; color:var(--text-light); border:none; background:none;
-      border-bottom:3px solid transparent; margin-bottom:-2px; white-space:nowrap; font-family:inherit; }
-    .lab-tab:hover { color:var(--brown-mid); }
-    .lab-tab.active { color:var(--brown-mid); border-bottom-color:var(--brown-light); font-weight:600; }
-    .lab-panel { display:none; } .lab-panel.active { display:block; }
-    .toolbar .form-control.sel { width:auto; min-width:150px; }
-    .critical-row { background:#ffebee !important; }
-    .abnormal-row { background:#fff3e0 !important; }
-    .tracker { display:flex; align-items:center; margin:4px 0 18px; }
-    .tracker .step { flex:1; text-align:center; font-size:12px; color:var(--text-light); position:relative; }
-    .tracker .dot { width:26px; height:26px; border-radius:50%; background:var(--brown-pale); color:var(--text-light); display:flex; align-items:center; justify-content:center; margin:0 auto 6px; font-size:12px; position:relative; z-index:1; }
-    .tracker .step.done .dot { background:var(--success); color:#fff; }
-    .tracker .step.current .dot { background:var(--brown-light); color:#fff; }
-    .tracker .step.done, .tracker .step.current { color:var(--text-dark); font-weight:600; }
-    .tracker .step:not(:last-child)::after { content:''; position:absolute; top:12px; left:50%; width:100%; height:2px; background:var(--brown-pale); }
-    .tracker .step.done:not(:last-child)::after { background:var(--success); }
-    .test-picker { border:1.5px solid var(--brown-pale); border-radius:8px; max-height:250px; overflow-y:auto; padding:6px 12px; }
-    .test-picker .grp { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--brown-light); margin:10px 0 4px; }
-    .test-picker label { display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; cursor:pointer; }
-    .test-picker label span.price { margin-left:auto; color:var(--text-light); font-size:12px; }
-    .range-row { display:grid; grid-template-columns:1.4fr .9fr repeat(6,.7fr) auto; gap:6px; margin-bottom:6px; align-items:center; }
-    .range-head { font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--text-light); }
-    .range-row .form-control { padding:7px 8px; font-size:12.5px; }
-    .res-grid { width:100%; border-collapse:collapse; font-size:13px; }
-    .res-grid th { text-align:left; font-size:11px; text-transform:uppercase; color:var(--text-light); padding:6px 8px; }
-    .res-grid td { padding:6px 8px; border-top:1px solid var(--brown-pale); vertical-align:middle; }
-    .pt-info { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 18px; background:var(--brown-cream); border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
-    .pt-info b { display:block; font-size:11px; text-transform:uppercase; color:var(--text-light); font-weight:600; }
-    @media (max-width:900px){ .range-row { grid-template-columns:1fr 1fr; } }
+    .sub { font-size:12px; color:var(--text-light); }
+    .lab-cell { max-width:220px; white-space:pre-wrap; word-break:break-word; }
+    .new-patient-box { grid-column: span 2; display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:14px; border:1.5px dashed var(--brown-pale); border-radius:8px; background:var(--brown-cream); }
+    .new-patient-box .full { grid-column: span 2; }
+    @media (max-width:900px){ .new-patient-box { grid-column: span 1; grid-template-columns:1fr; } .new-patient-box .full { grid-column: span 1; } }
   </style>
 </head>
 <body>
@@ -48,524 +23,98 @@
       </div>
       <div class="topbar-right">
         <div class="topbar-date" id="topbar-date"></div>
-        <button class="btn btn-primary" id="primary-action" onclick="primaryAction()">+ New Test Request</button>
+        <button class="btn btn-primary" onclick="openAdd()">+ Add Lab Test</button>
       </div>
     </div>
 
     <div class="page-content">
-      <div id="critical-banner"></div>
-
-      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:22px">
-        <div class="stat-card"><div class="stat-icon orange"><i class="fa-solid fa-hourglass-half"></i></div><div class="stat-info"><div class="label">Pending</div><div class="value" id="s-pending">—</div></div></div>
-        <div class="stat-card"><div class="stat-icon blue"><i class="fa-solid fa-flask"></i></div><div class="stat-info"><div class="label">In Progress</div><div class="value" id="s-progress">—</div></div></div>
-        <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-circle-check"></i></div><div class="stat-info"><div class="label">Completed Today</div><div class="value" id="s-done">—</div></div></div>
-        <div class="stat-card"><div class="stat-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="stat-info"><div class="label">Critical Alerts</div><div class="value" id="s-critical">—</div></div></div>
-        <div class="stat-card"><div class="stat-icon brown"><i class="fa-solid fa-boxes-stacked"></i></div><div class="stat-info"><div class="label">Low Reagents</div><div class="value" id="s-reagent">—</div></div></div>
-        <div class="stat-card" style="cursor:pointer" onclick="switchTab('investigations')"><div class="stat-icon blue"><i class="fa-solid fa-notes-medical"></i></div><div class="stat-info"><div class="label">Pending Investigations</div><div class="value" id="s-investigations">—</div></div></div>
-      </div>
-      <div id="investigations-banner"></div>
-
-      <div class="lab-tabs" id="lab-tabs">
-        <button class="lab-tab active" data-tab="requests">Test Requests</button>
-        <button class="lab-tab" data-tab="investigations">Patient Investigations</button>
-        <button class="lab-tab" data-tab="samples">Patient Samples</button>
-        <button class="lab-tab" data-tab="alerts">Results &amp; Alerts</button>
-        <button class="lab-tab" data-tab="tests">Laboratory Tests</button>
-        <button class="lab-tab" data-tab="categories">Test Categories</button>
-        <button class="lab-tab" data-tab="reagents">Reagents &amp; Inventory</button>
-      </div>
-
-      <!-- REQUESTS -->
-      <div class="lab-panel active" id="panel-requests">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="rq-search" placeholder="Search request ID, patient or test...">
-          </div>
-          <select class="form-control sel" id="rq-status">
-            <option value="">All Statuses</option><option value="pending">Pending</option><option value="sample-collected">Sample Collected</option>
-            <option value="in-progress">In Progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
-          </select>
-          <select class="form-control sel" id="rq-priority">
-            <option value="">All Priorities</option><option value="routine">Routine</option><option value="urgent">Urgent</option><option value="stat">STAT</option>
-          </select>
-          <input type="date" class="form-control sel" id="rq-from" title="From date">
-          <input type="date" class="form-control sel" id="rq-to" title="To date">
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Test Requests</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Request ID</th><th>Patient</th><th>Tests</th><th>Priority</th><th>Requested</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="rq-table"></tbody>
-          </table></div>
+      <div class="toolbar">
+        <div class="search-wrap">
+          <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input type="text" class="form-control" id="search-input" placeholder="Search patient, test or address...">
         </div>
       </div>
 
-      <!-- PATIENT INVESTIGATIONS (from Patient Records) -->
-      <div class="lab-panel" id="panel-investigations">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="iv-search" placeholder="Search patient name, ID or contact...">
-          </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Laboratory Records</span>
+          <span id="record-count" style="font-size:13px;color:var(--text-light)"></span>
         </div>
-        <p style="font-size:12.5px;color:var(--text-light);margin:-6px 0 14px">
-          Patients whose Patient Record has a "Lab Investigations" note from a clinician. Turn a note into a formal, trackable test request here,
-          or register a brand-new patient who needs a lab test straight away.
-        </p>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Patients With Noted Investigations</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Patient</th><th>Age / Sex</th><th>Contact</th><th>Lab Investigations Note</th><th>Noted On</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="iv-table"></tbody>
-          </table></div>
-        </div>
-      </div>
-
-      <!-- SAMPLES -->
-      <div class="lab-panel" id="panel-samples">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="sm-search" placeholder="Search sample ID, patient or request...">
-          </div>
-          <select class="form-control sel" id="sm-status">
-            <option value="">All Statuses</option><option value="collected">Collected</option><option value="received">Received</option>
-            <option value="processing">Processing</option><option value="stored">Stored</option><option value="disposed">Disposed</option><option value="rejected">Rejected</option>
-          </select>
-          <select class="form-control sel" id="sm-type"><option value="">All Sample Types</option></select>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Patient Samples</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Sample ID</th><th>Patient</th><th>Request</th><th>Type</th><th>Collected</th><th>Collected By</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="sm-table"></tbody>
-          </table></div>
-        </div>
-      </div>
-
-      <!-- ALERTS / RESULTS -->
-      <div class="lab-panel" id="panel-alerts">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="al-search" placeholder="Search patient, request or test...">
-          </div>
-          <select class="form-control sel" id="al-level">
-            <option value="">Critical &amp; Abnormal</option><option value="critical">Critical only</option><option value="abnormal">Abnormal only</option>
-          </select>
-          <select class="form-control sel" id="al-ack">
-            <option value="false">Unacknowledged</option><option value="true">Acknowledged</option><option value="">All</option>
-          </select>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Abnormal &amp; Critical Result Alerts</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Patient</th><th>Request</th><th>Test</th><th>Result</th><th>Reference</th><th>Flag</th><th>Entered</th><th>Actions</th></tr></thead>
-            <tbody id="al-table"></tbody>
-          </table></div>
-        </div>
-      </div>
-
-      <!-- TESTS -->
-      <div class="lab-panel" id="panel-tests">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="ts-search" placeholder="Search test name, code or ID...">
-          </div>
-          <select class="form-control sel" id="ts-category"><option value="">All Categories</option></select>
-          <button class="btn btn-outline" id="seed-btn" onclick="seedDefaults()" style="display:none">Load Starter Tests</button>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Laboratory Tests &amp; Reference Ranges</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Test ID</th><th>Name</th><th>Category</th><th>Sample</th><th>Reference Range</th><th>Price</th><th>TAT</th><th>Actions</th></tr></thead>
-            <tbody id="ts-table"></tbody>
-          </table></div>
-        </div>
-      </div>
-
-      <!-- CATEGORIES -->
-      <div class="lab-panel" id="panel-categories">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="ct-search" placeholder="Search categories...">
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Test Categories</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Name</th><th>Description</th><th>Tests</th><th>Actions</th></tr></thead>
-            <tbody id="ct-table"></tbody>
-          </table></div>
-        </div>
-      </div>
-
-      <!-- REAGENTS -->
-      <div class="lab-panel" id="panel-reagents">
-        <div class="toolbar">
-          <div class="search-wrap">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" class="form-control" id="rg-search" placeholder="Search reagent, category or lot number...">
-          </div>
-          <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="rg-low"> Show low stock only
-          </label>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Reagents &amp; Laboratory Inventory</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>ID</th><th>Name</th><th>Category</th><th>Lot No.</th><th>Qty</th><th>Unit</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="rg-table"></tbody>
-          </table></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Patient</th><th>Address</th><th>Test</th><th>Result</th><th>Treatment</th><th>Notes</th></tr></thead>
+            <tbody id="lab-table"></tbody>
+          </table>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- REQUEST MODAL -->
-<div class="modal-overlay" id="request-modal">
-  <div class="modal modal-lg">
-    <div class="modal-header"><span class="modal-title">New Test Request</span><button class="modal-close" onclick="Modal.close('request-modal')">×</button></div>
-    <div class="modal-body">
-      <form id="request-form" onsubmit="return false">
-        <div class="form-grid">
-          <div class="form-group col-span-2">
-            <label class="form-label">Patient <span class="req">*</span>
-              <button type="button" class="btn btn-sm btn-outline" style="float:right" onclick="openPatientQuickAdd('request')">+ Register Walk-in Patient</button></label>
-            <select class="form-control" id="rq-patient" required><option value="">Select patient...</option></select>
-            <p style="font-size:11.5px;color:var(--text-light);margin-top:4px">Choose an existing patient from Patient Records, or register a laboratory-only walk-in — walk-ins are <strong>not</strong> added to Patient Records.</p>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Priority</label>
-            <select name="priority" class="form-control"><option value="routine">Routine</option><option value="urgent">Urgent</option><option value="stat">STAT</option></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Requested By</label>
-            <input type="text" name="requestedByName" class="form-control" placeholder="Doctor / clinician">
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Type of Test <span class="req">*</span> <span id="rq-total" style="float:right;font-weight:600;color:var(--brown-mid)"></span></label>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
-              <select class="form-control" id="rq-test-category" style="flex:0 0 200px"><option value="">All Test Types</option></select>
-              <input type="text" class="form-control" id="rq-test-filter" placeholder="Filter by name or code...">
-            </div>
-            <div class="test-picker" id="rq-test-picker"></div>
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Clinical Notes</label>
-            <textarea name="clinicalNotes" class="form-control" rows="2" placeholder="Reason for request, suspected diagnosis..."></textarea>
-          </div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('request-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveRequest()">Submit Request</button>
-    </div>
-  </div>
-</div>
-
-<!-- SAMPLE MODAL -->
-<div class="modal-overlay" id="sample-modal">
+<!-- Add Lab Test Modal -->
+<div class="modal-overlay" id="lab-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="sample-title">Collect Sample</span><button class="modal-close" onclick="Modal.close('sample-modal')">×</button></div>
+    <div class="modal-header">
+      <span class="modal-title">Add Lab Test</span>
+      <button class="modal-close" onclick="Modal.close('lab-modal')">×</button>
+    </div>
     <div class="modal-body">
-      <form id="sample-form" onsubmit="return false">
-        <div class="form-grid">
-          <div class="form-group col-span-2" id="sm-request-group">
-            <label class="form-label">Test Request <span class="req">*</span></label>
-            <select name="request" class="form-control" id="sm-request"></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Sample Type <span class="req">*</span></label>
-            <select name="sampleType" class="form-control" id="sm-sampletype" required></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Container</label>
-            <input type="text" name="container" class="form-control" placeholder="e.g. EDTA tube, plain tube">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Collected At</label>
-            <input type="datetime-local" name="collectedAt" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Collected By</label>
-            <input type="text" name="collectedBy" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Status</label>
-            <select name="status" class="form-control">
-              <option value="collected">Collected</option><option value="received">Received</option><option value="processing">Processing</option>
-              <option value="stored">Stored</option><option value="disposed">Disposed</option><option value="rejected">Rejected</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Storage Location</label>
-            <input type="text" name="storageLocation" class="form-control" placeholder="e.g. Fridge A, Rack 2">
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Notes / Rejection Reason</label>
-            <textarea name="notes" class="form-control" rows="2"></textarea>
-          </div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('sample-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSample()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- RESULTS MODAL -->
-<div class="modal-overlay" id="results-modal">
-  <div class="modal modal-lg">
-    <div class="modal-header"><span class="modal-title" id="results-title">Enter Results</span><button class="modal-close" onclick="Modal.close('results-modal')">×</button></div>
-    <div class="modal-body">
-      <div class="pt-info" id="results-patient"></div>
-      <div class="table-wrap">
-        <table class="res-grid">
-          <thead><tr><th>Test</th><th style="width:170px">Result</th><th>Unit</th><th>Reference</th><th>Flag</th><th>Remarks</th></tr></thead>
-          <tbody id="results-body"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('results-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveResults()">Save Results</button>
-    </div>
-  </div>
-</div>
-
-<!-- REPORT MODAL -->
-<div class="modal-overlay" id="report-modal">
-  <div class="modal modal-lg">
-    <div class="modal-header"><span class="modal-title" id="report-title">Laboratory Report</span><button class="modal-close" onclick="Modal.close('report-modal')">×</button></div>
-    <div class="modal-body" id="report-body"></div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('report-modal')">Close</button>
-      <button class="btn btn-primary" onclick="printReport()"><i class="fa-solid fa-print"></i> Print Report</button>
-    </div>
-  </div>
-</div>
-
-<!-- TEST MODAL -->
-<div class="modal-overlay" id="test-modal">
-  <div class="modal modal-lg">
-    <div class="modal-header"><span class="modal-title" id="test-title">Add Laboratory Test</span><button class="modal-close" onclick="Modal.close('test-modal')">×</button></div>
-    <div class="modal-body">
-      <form id="test-form" onsubmit="return false">
+      <form id="lab-form" onsubmit="return false">
         <div class="form-grid">
           <div class="form-group col-span-2">
-            <label class="form-label">Test Name <span class="req">*</span></label>
-            <input type="text" name="name" class="form-control" required>
+            <label class="form-label">Patient Name <span class="req">*</span></label>
+            <select id="f-patient" class="form-control" onchange="patientChanged()"></select>
           </div>
-          <div class="form-group">
-            <label class="form-label">Code</label>
-            <input type="text" name="code" class="form-control" placeholder="e.g. FBC">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <select name="category" class="form-control" id="ts-form-category"></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Sample Type</label>
-            <select name="sampleType" class="form-control" id="ts-form-sample"></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Result Type</label>
-            <select name="resultType" class="form-control" id="ts-resulttype" onchange="toggleResultType()">
-              <option value="numeric">Numeric (with reference ranges)</option><option value="qualitative">Qualitative (Positive / Negative)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Price (GH₵)</label>
-            <input type="number" name="price" class="form-control" min="0" step="0.01" value="0">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Turnaround (hours)</label>
-            <input type="number" name="turnaroundHours" class="form-control" min="0" value="24">
-          </div>
-          <div class="form-group" id="unit-group">
-            <label class="form-label">Unit</label>
-            <input type="text" name="unit" class="form-control" placeholder="e.g. g/dL">
-          </div>
-          <div class="form-group col-span-2" id="qual-group" style="display:none">
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label">Result Options (comma separated)</label>
-                <input type="text" id="ts-qual-options" class="form-control" value="Positive, Negative">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Normal Result</label>
-                <input type="text" id="ts-qual-normal" class="form-control" value="Negative">
-              </div>
+
+          <div class="new-patient-box" id="new-patient-box" style="display:none">
+            <div class="form-group full">
+              <label class="form-label">Full Name <span class="req">*</span></label>
+              <input type="text" id="np-name" class="form-control" placeholder="Lab-only patient (not added to Patient Records)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Age <span class="req">*</span></label>
+              <input type="number" id="np-age" class="form-control" min="0" max="150">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sex <span class="req">*</span></label>
+              <select id="np-sex" class="form-control"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select>
             </div>
           </div>
-          <div class="form-group col-span-2" id="ranges-group">
-            <label class="form-label">Reference Ranges
-              <button type="button" class="btn btn-sm btn-outline" style="float:right" onclick="addRangeRow()">+ Add Range</button></label>
-            <div class="range-row range-head"><span>Label</span><span>Sex</span><span>Age min</span><span>Age max</span><span>Low</span><span>High</span><span>Crit. low</span><span>Crit. high</span><span></span></div>
-            <div id="ranges-list"></div>
-            <p style="font-size:12px;color:var(--text-light);margin-top:4px">Results outside Low/High are flagged abnormal; results at or beyond the critical limits raise a critical alert.</p>
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Description</label>
-            <textarea name="description" class="form-control" rows="2"></textarea>
-          </div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('test-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveTest()">Save</button>
-    </div>
-  </div>
-</div>
 
-<!-- CATEGORY MODAL -->
-<div class="modal-overlay" id="category-modal">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-header"><span class="modal-title" id="category-title">Add Category</span><button class="modal-close" onclick="Modal.close('category-modal')">×</button></div>
-    <div class="modal-body">
-      <form id="category-form" onsubmit="return false">
-        <div class="form-group">
-          <label class="form-label">Category Name <span class="req">*</span></label>
-          <input type="text" name="name" class="form-control" required placeholder="e.g. Haematology">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Description</label>
-          <textarea name="description" class="form-control" rows="2"></textarea>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('category-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveCategory()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- REAGENT MODAL -->
-<div class="modal-overlay" id="reagent-modal">
-  <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="reagent-title">Add Reagent</span><button class="modal-close" onclick="Modal.close('reagent-modal')">×</button></div>
-    <div class="modal-body">
-      <form id="reagent-form" onsubmit="return false">
-        <div class="form-grid">
-          <div class="form-group col-span-2">
-            <label class="form-label">Reagent / Item Name <span class="req">*</span></label>
-            <input type="text" name="name" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <input type="text" name="category" class="form-control" placeholder="e.g. Reagent, Consumable, Kit">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Supplier</label>
-            <input type="text" name="supplier" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Lot Number</label>
-            <input type="text" name="lotNumber" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Storage</label>
-            <input type="text" name="storage" class="form-control" placeholder="e.g. 2–8°C fridge">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Quantity <span class="req">*</span></label>
-            <input type="number" name="quantity" class="form-control" min="0" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Unit</label>
-            <select name="unit" class="form-control">
-              <option value="pcs">pcs</option><option value="box">box</option><option value="kit">kit</option>
-              <option value="bottle">bottle</option><option value="vial">vial</option><option value="pack">pack</option><option value="ml">ml</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Cost Price (GH₵)</label>
-            <input type="number" name="costPrice" class="form-control" min="0" step="0.01">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Low Stock Threshold</label>
-            <input type="number" name="lowStockThreshold" class="form-control" min="1" value="5">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Expiry Date</label>
-            <input type="date" name="expiryDate" class="form-control">
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Notes</label>
-            <textarea name="notes" class="form-control" rows="2"></textarea>
-          </div>
-        </div>
-      </form>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('reagent-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveReagent()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- WALK-IN PATIENT MODAL (laboratory-only, NOT added to Patient Records) -->
-<div class="modal-overlay" id="patient-modal">
-  <div class="modal">
-    <div class="modal-header"><span class="modal-title">Register Walk-in Patient</span><button class="modal-close" onclick="Modal.close('patient-modal')">×</button></div>
-    <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--text-light);margin-bottom:14px">For someone who needs a lab test but has no chart yet. This is <strong>laboratory-only</strong> — it will not create or appear in Patient Records.</p>
-      <form id="patient-form" onsubmit="return false">
-        <div class="form-grid">
-          <div class="form-group col-span-2">
-            <label class="form-label">Full Name <span class="req">*</span></label>
-            <input type="text" name="name" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Age <span class="req">*</span></label>
-            <input type="number" name="age" class="form-control" min="0" max="150" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Sex <span class="req">*</span></label>
-            <select name="sex" class="form-control" required><option value="">Select...</option><option>Male</option><option>Female</option><option>Other</option></select>
-          </div>
-          <div class="form-group col-span-2">
-            <label class="form-label">Contact Number <span class="req">*</span></label>
-            <input type="text" name="contact" class="form-control" required placeholder="e.g. 024xxxxxxx">
-          </div>
           <div class="form-group col-span-2">
             <label class="form-label">Address</label>
-            <input type="text" name="address" class="form-control">
+            <input type="text" id="f-address" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Test / Investigation <span class="req">*</span></label>
+            <select id="f-type" class="form-control" onchange="typeChanged()"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date <span class="req">*</span></label>
+            <input type="date" id="f-date" class="form-control">
+          </div>
+          <div class="form-group col-span-2" id="other-wrap" style="display:none">
+            <label class="form-label">Specify Test <span class="req">*</span></label>
+            <input type="text" id="f-other" class="form-control" placeholder="Name of the test / investigation">
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label">Test Result <span class="req">*</span></label>
+            <input type="text" id="f-result" class="form-control" placeholder="e.g. Positive, 11.2 g/dL, 5.4 mmol/L">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Treatment</label>
+            <textarea id="f-treatment" class="form-control" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea id="f-notes" class="form-control" rows="2"></textarea>
           </div>
         </div>
       </form>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('patient-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="savePatientQuickAdd()">Register &amp; Continue</button>
-    </div>
-  </div>
-</div>
-
-<!-- STOCK MODAL (restock / use) -->
-<div class="modal-overlay" id="stock-modal">
-  <div class="modal" style="max-width:360px">
-    <div class="modal-header"><span class="modal-title" id="stock-title">Restock</span><button class="modal-close" onclick="Modal.close('stock-modal')">×</button></div>
-    <div class="modal-body">
-      <p id="stock-name" style="font-weight:600;margin-bottom:16px"></p>
-      <div class="form-group">
-        <label class="form-label">Quantity <span class="req">*</span></label>
-        <input type="number" id="stock-qty" class="form-control" min="1" value="1">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="Modal.close('stock-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmStock()">Confirm</button>
+      <button class="btn btn-outline" onclick="Modal.close('lab-modal')">Cancel</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveRecord()"> Save</button>
     </div>
   </div>
 </div>
@@ -575,667 +124,131 @@
 <script>
 renderSidebar('laboratory');
 
-// ── STATE ──
-const S = { tests: [], categories: [], patients: [], walkins: [], requests: [], samples: [], reagents: [], alerts: [], investigations: [], tab: 'requests' };
-const SAMPLE_TYPES = ['Blood', 'Blood (EDTA)', 'Blood (Fluoride)', 'Serum', 'Plasma', 'Urine', 'Stool', 'Sputum', 'Swab', 'CSF', 'Other'];
-let current = { request: null, test: null, category: null, reagent: null, sample: null, stockMode: 'restock', stockId: null, reportRequest: null, patientQuickAddFor: null };
-
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const jsAttr = (v) => esc(JSON.stringify(v)); // safe to drop into a single-quoted inline onclick="" attribute
-const debounce = (fn, ms = 300) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
-const $ = (id) => document.getElementById(id);
-const emptyRow = (cols, msg) => `<tr><td colspan="${cols}"><div class="empty-state"><div class="icon"></div><h3>${msg}</h3></div></td></tr>`;
-const qs = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-
-const STATUS_LABEL = { pending:'Pending', 'sample-collected':'Sample Collected', 'in-progress':'In Progress', completed:'Completed', cancelled:'Cancelled' };
-const STATUS_CLS = { pending:'badge-warning', 'sample-collected':'badge-info', 'in-progress':'badge-brown', completed:'badge-success', cancelled:'badge-danger' };
-const PRIORITY_CLS = { routine:'badge-brown', urgent:'badge-warning', stat:'badge-danger' };
-const SAMPLE_CLS = { collected:'badge-info', received:'badge-info', processing:'badge-brown', stored:'badge-success', disposed:'badge-brown', rejected:'badge-danger' };
-const flagBadge = (f) => !f ? '—' : `<span class="badge ${f === 'Normal' ? 'badge-success' : f.startsWith('Critical') ? 'badge-danger' : 'badge-warning'}">${esc(f)}</span>`;
-const statusBadgeHtml = (s) => `<span class="badge ${STATUS_CLS[s] || 'badge-brown'}">${STATUS_LABEL[s] || esc(s)}</span>`;
-const nowLocalInput = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
-
-// ── REFERENCE RANGE LOGIC (mirrors server) ──
-function pickRange(test, age, sex) {
-  const rs = test?.referenceRanges || [];
-  const fits = r => age == null || (age >= (r.ageMin ?? 0) && age <= (r.ageMax ?? 150));
-  return rs.find(r => r.sex === sex && fits(r)) || rs.find(r => r.sex === 'Any' && fits(r)) || rs[0] || null;
-}
-function rangeText(test, r) {
-  if (!test) return '';
-  if (test.resultType === 'qualitative') return test.normalOption || '';
-  if (!r) return '';
-  const u = test.unit ? ` ${test.unit}` : '';
-  if (r.low != null && r.high != null) return `${r.low} – ${r.high}${u}`;
-  if (r.low != null) return `≥ ${r.low}${u}`;
-  if (r.high != null) return `≤ ${r.high}${u}`;
-  return '';
-}
-function evaluate(test, age, sex, raw) {
-  if (!test || raw === '' || raw == null) return '';
-  if (test.resultType === 'qualitative') return String(raw).toLowerCase() === String(test.normalOption).toLowerCase() ? 'Normal' : 'Abnormal';
-  const r = pickRange(test, age, sex), v = parseFloat(raw);
-  if (isNaN(v) || !r) return '';
-  if (r.criticalLow != null && v <= r.criticalLow) return 'Critical Low';
-  if (r.criticalHigh != null && v >= r.criticalHigh) return 'Critical High';
-  if (r.low != null && v < r.low) return 'Low';
-  if (r.high != null && v > r.high) return 'High';
-  return 'Normal';
-}
-const testById = (id) => S.tests.find(t => t._id === id);
-
-// ── TABS ──
-const ACTIONS = {
-  requests:       ['+ New Test Request',      () => openRequest()],
-  investigations: ['+ Register New Patient',  () => openPatientQuickAdd('investigations')],
-  samples:        ['+ Collect Sample',        () => openSample()],
-  alerts:         ['Refresh Alerts',          () => { loadAlerts(); loadStats(); }],
-  tests:          ['+ Add Test',              () => openTest()],
-  categories:     ['+ Add Category',          () => openCategory()],
-  reagents:       ['+ Add Reagent',           () => openReagent()]
+const TEST_TYPES = {
+  'Haematology': ['Full Blood Count (FBC)', 'Haemoglobin (Hb)', 'Packed Cell Volume (PCV)', 'ESR', 'Blood Film', 'Blood Group & Rhesus', 'Hb Genotype', 'Sickling Test', 'Reticulocyte Count', 'Coagulation Profile (PT/INR)'],
+  'Biochemistry': ['Fasting Blood Glucose', 'Random Blood Glucose', 'HbA1c', 'Oral Glucose Tolerance Test (OGTT)', 'Lipid Profile', 'Liver Function Test (LFT)', 'Renal Function Test (Urea/Creatinine)', 'Serum Electrolytes', 'Serum Uric Acid', 'Serum Calcium', 'Thyroid Function Test', 'Cardiac Troponin', 'Serum Amylase'],
+  'Parasitology': ['Malaria Parasite (Microscopy)', 'Malaria RDT', 'Stool Microscopy', 'Stool Occult Blood', 'Urine Microscopy (Parasites)'],
+  'Microbiology': ['Urine Culture & Sensitivity', 'Blood Culture', 'Wound Swab Culture', 'High Vaginal Swab (HVS)', 'Throat Swab Culture', 'Sputum AFB / GeneXpert', 'Sputum Culture', 'Gram Stain'],
+  'Serology / Immunology': ['HIV Screening', 'Hepatitis B Surface Antigen (HBsAg)', 'Hepatitis C Antibody', 'VDRL / Syphilis', 'Widal Test', 'Typhoid IgM/IgG', 'H. pylori (Ag/Ab)', 'C-Reactive Protein (CRP)', 'Rheumatoid Factor', 'ASO Titre', 'COVID-19 Antigen'],
+  'Urine Tests': ['Urinalysis (Dipstick)', 'Urine Pregnancy Test (UPT)', 'Urine Protein / Albumin'],
+  'Hormones & Reproductive': ['Pregnancy Test (β-hCG)', 'Semen Analysis', 'PSA', 'FSH / LH', 'Testosterone', 'Prolactin', 'Progesterone'],
+  'Imaging & Other': ['Ultrasound Scan', 'X-Ray', 'ECG']
 };
-function primaryAction() { ACTIONS[S.tab][1](); }
-function switchTab(tab) {
-  S.tab = tab;
-  document.querySelectorAll('.lab-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.lab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
-  $('primary-action').textContent = ACTIONS[tab][0];
-  ({ requests: loadRequests, investigations: loadInvestigations, samples: loadSamples, alerts: loadAlerts, tests: loadTests, categories: loadCategories, reagents: loadReagents })[tab]();
-}
-$('lab-tabs').addEventListener('click', e => { const b = e.target.closest('.lab-tab'); if (b) switchTab(b.dataset.tab); });
+const OTHER = '__other__', NEW_PATIENT = '__new__';
+let registered = [], labOnly = [], catalogue = [];
 
-// ── STATS ──
-async function loadStats() {
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+
+function flagBadge(flag) {
+  if (!flag) return '';
+  const cls = flag === 'Normal' ? 'badge-success' : flag.startsWith('Critical') ? 'badge-danger' : 'badge-warning';
+  return `<span class="badge ${cls}">${esc(flag)}</span>`;
+}
+
+async function loadRecords() {
   try {
-    const s = await API.get('/laboratory/stats');
-    $('s-pending').textContent = s.pending; $('s-progress').textContent = s.inProgress;
-    $('s-done').textContent = s.completedToday; $('s-critical').textContent = s.criticalOpen; $('s-reagent').textContent = s.lowReagents;
-    $('s-investigations').textContent = s.pendingInvestigations;
-    $('critical-banner').innerHTML = s.criticalOpen ? `<div class="alert alert-danger" style="margin-bottom:18px;cursor:pointer" onclick="showCritical()">
-      <i class="fa-solid fa-triangle-exclamation"></i> <strong>${s.criticalOpen} critical result${s.criticalOpen > 1 ? 's' : ''}</strong> awaiting acknowledgement. Click to review.</div>` : '';
-    $('investigations-banner').innerHTML = s.pendingInvestigations ? `<div class="alert alert-warning" style="margin-bottom:18px;cursor:pointer" onclick="switchTab('investigations')">
-      <i class="fa-solid fa-notes-medical"></i> <strong>${s.pendingInvestigations} patient${s.pendingInvestigations > 1 ? 's' : ''}</strong> from Patient Records ${s.pendingInvestigations > 1 ? 'have' : 'has'} noted lab investigations with no test request yet. Click to review.</div>` : '';
-  } catch (e) { /* stats are non-blocking */ }
-}
-function showCritical() { $('al-level').value = 'critical'; $('al-ack').value = 'false'; switchTab('alerts'); }
-
-// ══════════ PATIENT INVESTIGATIONS (from Patient Records) ══════════
-async function loadInvestigations() {
-  try {
-    S.investigations = await API.get('/laboratory/pending-investigations?' + qs({ search: $('iv-search').value }));
-    $('iv-table').innerHTML = !S.investigations.length ? emptyRow(7, 'No patients with pending lab investigations') : S.investigations.map(p => `<tr>
-      <td><strong>${esc(p.name)}</strong><div style="font-size:12px;color:var(--text-light)">${esc(p.patientId)}</div></td>
-      <td>${esc(p.age)}y ${esc(p.sex)}</td><td>${esc(p.contact) || '—'}</td>
-      <td style="max-width:260px;white-space:pre-wrap;font-size:12.5px">${esc(p.latestLabNote)}</td>
-      <td>${p.latestNoteDate ? Fmt.datetime(p.latestNoteDate) : '—'}</td>
-      <td>${p.openRequestId ? `<span class="badge badge-info">Requested — ${esc(p.openRequestId)}</span>` : '<span class="badge badge-warning">Not requested</span>'}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-sm btn-primary" onclick='openRequest(${jsAttr(p._id)}, ${jsAttr(p.latestLabNote)})'><i class="fa-solid fa-flask"></i> Create Request</button>
-      </td></tr>`).join('');
-  } catch (e) { Toast.error('Failed to load patient investigations'); }
+    const list = await API.get('/laboratory/records?search=' + encodeURIComponent($('search-input').value));
+    $('record-count').textContent = `${list.length} total`;
+    $('lab-table').innerHTML = !list.length
+      ? '<tr><td colspan="7"><div class="empty-state"><div class="icon"><i class="fa-solid fa-flask-vial"></i></div><h3>No laboratory records found</h3></div></td></tr>'
+      : list.map(r => `<tr>
+        <td style="white-space:nowrap">${Fmt.date(r.date)}</td>
+        <td><strong>${esc(r.patientName)}</strong>
+          <div class="sub">${esc(r.patientId)} ${r.labOnly ? '<span class="badge badge-info">Lab only</span>' : ''}</div></td>
+        <td class="lab-cell">${esc(r.address) || '—'}</td>
+        <td>${esc(r.testType)}${r.category ? `<div class="sub">${esc(r.category)}</div>` : ''}</td>
+        <td>${r.result ? `<strong>${esc(r.result)}${r.unit && !String(r.result).includes(r.unit) ? ' ' + esc(r.unit) : ''}</strong>` : '<span class="badge badge-warning">Pending</span>'} ${flagBadge(r.flag)}</td>
+        <td class="lab-cell">${esc(r.treatment) || '—'}</td>
+        <td class="lab-cell">${esc(r.notes) || '—'}</td>
+      </tr>`).join('');
+  } catch (e) { Toast.error('Failed to load laboratory records'); }
 }
 
-// ══════════ QUICK-ADD PATIENT (from Laboratory) ══════════
-function openPatientQuickAdd(returnTo) {
-  current.patientQuickAddFor = returnTo || null;
-  $('patient-form').reset();
-  Modal.open('patient-modal');
-}
-async function savePatientQuickAdd() {
-  const form = $('patient-form');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  try {
-    // Laboratory-only walk-in — POSTs to the Laboratory module's own endpoint,
-    // never /api/patients, so this never creates or touches a Patient Records entry.
-    const walkin = await API.post('/laboratory/walkin-patients', getFormData(form));
-    Toast.success(`${walkin.name} registered (laboratory-only)`);
-    S.walkins.push(walkin);
-    Modal.close('patient-modal');
-    if (current.patientQuickAddFor === 'request') {
-      // Request modal is open behind this one — just add & select the new walk-in in it.
-      fillPatientDropdown(`w:${walkin._id}`);
-    } else {
-      // Registered from the toolbar (no request open yet) — go straight into creating their request.
-      await openRequest(null, null, walkin._id);
-    }
-  } catch (e) { Toast.error(e.message); }
-}
-
-// ── REFERENCE DATA ──
 async function loadRefData() {
-  try {
-    const [tests, cats] = await Promise.all([API.get('/laboratory/tests'), API.get('/laboratory/categories')]);
-    S.tests = tests; S.categories = cats;
-    fillCategorySelects();
-  } catch (e) { Toast.error('Failed to load laboratory data'); }
-}
-function fillCategorySelects() {
-  const cur = $('ts-category').value;
-  $('ts-category').innerHTML = '<option value="">All Categories</option>' + S.categories.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
-  $('ts-category').value = cur;
-  $('ts-form-category').innerHTML = '<option value="">— None —</option>' + S.categories.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
-}
-async function loadPatients() {
-  if (S.patients.length) return;
-  try { S.patients = (await API.get('/patients?limit=1000')).patients || []; } catch (e) { Toast.error('Failed to load patients'); }
-}
-async function loadWalkins() {
-  if (S.walkins.length) return;
-  try { S.walkins = await API.get('/laboratory/walkin-patients'); } catch (e) { Toast.error('Failed to load walk-in patients'); }
-}
-function fillTestCategoryDropdown() {
-  $('rq-test-category').innerHTML = '<option value="">All Test Types</option>' + S.categories.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  const [p, w, t] = await Promise.all([
+    API.get('/patients?limit=1000').catch(() => ({ patients: [] })),
+    API.get('/laboratory/walkin-patients').catch(() => []),
+    API.get('/laboratory/tests?active=true').catch(() => [])
+  ]);
+  registered = p.patients || []; labOnly = w; catalogue = t;
 }
 
-// ══════════ REQUESTS ══════════
-async function loadRequests() {
-  try {
-    S.requests = await API.get('/laboratory/requests?' + qs({ search: $('rq-search').value, status: $('rq-status').value, priority: $('rq-priority').value, from: $('rq-from').value, to: $('rq-to').value }));
-    $('rq-table').innerHTML = !S.requests.length ? emptyRow(7, 'No test requests found') : S.requests.map(r => {
-      const done = r.tests.filter(t => t.status === 'completed').length;
-      const hasCrit = r.tests.some(t => t.result?.flag?.startsWith('Critical'));
-      const hasAbn = r.tests.some(t => t.result?.flag && t.result.flag !== 'Normal');
-      const open = !['completed', 'cancelled'].includes(r.status);
-      return `<tr class="${hasCrit ? 'critical-row' : hasAbn ? 'abnormal-row' : ''}">
-        <td><code>${esc(r.requestId)}</code></td>
-        <td><strong>${esc(r.patientName)}</strong>${r.patient ? '' : ' <span class="badge badge-brown" style="font-size:10px">Walk-in</span>'}<div style="font-size:12px;color:var(--text-light)">${esc(r.patientId)} · ${esc(r.age ?? '—')}y ${esc(r.sex)}</div></td>
-        <td>${esc(r.tests.map(t => t.testName).slice(0, 2).join(', '))}${r.tests.length > 2 ? ` +${r.tests.length - 2}` : ''}<div style="font-size:12px;color:var(--text-light)">${done}/${r.tests.length} resulted</div></td>
-        <td><span class="badge ${PRIORITY_CLS[r.priority]}">${r.priority === 'stat' ? 'STAT' : esc(r.priority)}</span></td>
-        <td>${Fmt.datetime(r.createdAt)}</td>
-        <td>${statusBadgeHtml(r.status)}${hasCrit ? ' <span class="badge badge-danger">Critical</span>' : ''}</td>
-        <td style="white-space:nowrap">
-          ${r.status !== 'cancelled' ? `<button class="btn btn-sm btn-secondary" title="Enter results" onclick="openResults('${r._id}')"><i class="fa-solid fa-pen-to-square"></i></button>` : ''}
-          ${['pending'].includes(r.status) ? `<button class="btn btn-sm btn-success" title="Collect sample" onclick="openSample('${r._id}')"><i class="fa-solid fa-vial"></i></button>` : ''}
-          ${['pending', 'sample-collected'].includes(r.status) ? `<button class="btn btn-sm btn-outline" title="Start processing" onclick="setRequestStatus('${r._id}','in-progress')"><i class="fa-solid fa-play"></i></button>` : ''}
-          <button class="btn btn-sm btn-outline" title="View / print report" onclick="openReport('${r._id}')"><i class="fa-solid fa-file-lines"></i></button>
-          ${open ? `<button class="btn btn-sm btn-outline" title="Cancel request" onclick="setRequestStatus('${r._id}','cancelled')"><i class="fa-solid fa-ban"></i></button>` : ''}
-          <button class="btn btn-sm btn-danger" title="Delete" onclick="deleteRequest('${r._id}','${esc(r.requestId)}')"><i class="fa-solid fa-trash"></i></button>
-        </td></tr>`;
-    }).join('');
-  } catch (e) { Toast.error('Failed to load requests'); }
-}
+function fillSelects() {
+  $('f-patient').innerHTML = '<option value="">Select patient</option>' +
+    `<option value="${NEW_PATIENT}">+ New lab-only patient</option>` +
+    (registered.length ? `<optgroup label="Registered Patients">${registered.map(p => `<option value="p:${p._id}">${esc(p.name)} (${esc(p.patientId)})</option>`).join('')}</optgroup>` : '') +
+    (labOnly.length ? `<optgroup label="Lab-only Patients">${labOnly.map(w => `<option value="w:${w._id}">${esc(w.name)} (${esc(w.walkInId)})</option>`).join('')}</optgroup>` : '');
 
-// Patient dropdown values are prefixed so we know which collection to submit against:
-// "p:<id>" = existing patient from Patient Records, "w:<id>" = laboratory-only walk-in.
-function fillPatientDropdown(selectedValue) {
-  const opts = ['<option value="">Select patient...</option>'];
-  if (S.patients.length) opts.push(`<optgroup label="Patient Records">${S.patients.map(p => `<option value="p:${p._id}">${esc(p.name)} — ${esc(p.patientId)} (${esc(p.age)}y ${esc(p.sex)})</option>`).join('')}</optgroup>`);
-  if (S.walkins.length) opts.push(`<optgroup label="Laboratory Walk-in Patients">${S.walkins.map(w => `<option value="w:${w._id}">${esc(w.name)} — ${esc(w.walkInId)} (${esc(w.age)}y ${esc(w.sex)})</option>`).join('')}</optgroup>`);
-  $('rq-patient').innerHTML = opts.join('');
-  if (selectedValue) $('rq-patient').value = selectedValue;
-}
-async function openRequest(presetPatientId, presetNotes, presetWalkInId) {
-  await Promise.all([loadPatients(), loadWalkins(), S.tests.length ? null : loadRefData()]);
-  // A patient just registered here or one loaded after the cache was filled
-  // won't be in it yet — make sure a preset patient is always selectable.
-  if (presetPatientId && !S.patients.some(p => p._id === presetPatientId)) {
-    try { S.patients.push(await API.get(`/patients/${presetPatientId}`)); } catch (e) {}
-  }
-  $('request-form').reset();
-  fillPatientDropdown(presetWalkInId ? `w:${presetWalkInId}` : presetPatientId ? `p:${presetPatientId}` : '');
-  if (presetNotes) $('request-form').elements.clinicalNotes.value = presetNotes;
-  $('rq-test-filter').value = ''; fillTestCategoryDropdown(); $('rq-test-category').value = '';
-  renderTestPicker();
-  Modal.open('request-modal');
-}
-function renderTestPicker() {
-  const checked = new Set([...document.querySelectorAll('#rq-test-picker input:checked')].map(i => i.value));
-  const f = $('rq-test-filter').value.toLowerCase();
-  const cat = $('rq-test-category').value;
-  const list = S.tests.filter(t => t.active !== false
-    && (!cat || t.category === cat)
-    && (!f || t.name.toLowerCase().includes(f) || (t.code || '').toLowerCase().includes(f) || (t.category || '').toLowerCase().includes(f)));
-  if (!list.length) { $('rq-test-picker').innerHTML = `<p style="padding:12px;font-size:13px;color:var(--text-light)">${S.tests.length ? 'No matching tests.' : 'No laboratory tests defined yet. Add tests in the Laboratory Tests tab.'}</p>`; updateTotal(); return; }
   const groups = {};
-  list.forEach(t => (groups[t.category || 'Uncategorised'] = groups[t.category || 'Uncategorised'] || []).push(t));
-  $('rq-test-picker').innerHTML = Object.entries(groups).map(([g, ts]) => `<div class="grp">${esc(g)}</div>` +
-    ts.map(t => `<label><input type="checkbox" value="${t._id}" ${checked.has(t._id) ? 'checked' : ''} onchange="updateTotal()"> ${esc(t.name)}${t.code ? ` <small style="color:var(--text-light)">(${esc(t.code)})</small>` : ''}<span class="price">${Fmt.currency(t.price)}</span></label>`).join('')).join('');
-  updateTotal();
-}
-function updateTotal() {
-  const ids = [...document.querySelectorAll('#rq-test-picker input:checked')].map(i => i.value);
-  const total = ids.reduce((s, id) => s + (testById(id)?.price || 0), 0);
-  $('rq-total').textContent = ids.length ? `${ids.length} selected · ${Fmt.currency(total)}` : '';
-}
-async function saveRequest() {
-  const form = $('request-form');
-  const picked = $('rq-patient').value;
-  if (!picked) { Toast.warning('Select a patient'); return; }
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  const testIds = [...document.querySelectorAll('#rq-test-picker input:checked')].map(i => i.value);
-  if (!testIds.length) { Toast.warning('Select at least one test'); return; }
-  const [kind, id] = [picked.slice(0, 1), picked.slice(2)];
-  const payload = { ...getFormData(form), testIds };
-  if (kind === 'p') payload.patient = id; else payload.walkInPatient = id;
-  try {
-    await API.post('/laboratory/requests', payload);
-    Toast.success('Test request created');
-    Modal.close('request-modal'); loadRequests(); loadStats();
-  } catch (e) { Toast.error(e.message); }
-}
-async function setRequestStatus(id, status) {
-  if (status === 'cancelled' && !window.confirm('Cancel this test request?')) return;
-  try { await API.patch(`/laboratory/requests/${id}/status`, { status }); Toast.success('Status updated'); loadRequests(); loadStats(); }
-  catch (e) { Toast.error(e.message); }
-}
-async function deleteRequest(id, label) {
-  if (!window.confirm(`Delete request "${label}" and its samples?`)) return;
-  try { await API.delete(`/laboratory/requests/${id}`); Toast.success('Deleted'); loadRequests(); loadStats(); }
-  catch (e) { Toast.error(e.message); }
+  Object.entries(TEST_TYPES).forEach(([g, l]) => groups[g] = l.slice());
+  const known = new Set(Object.values(TEST_TYPES).flat().map(n => n.toLowerCase()));
+  catalogue.forEach(t => {
+    if (known.has(String(t.name).toLowerCase())) return;
+    known.add(String(t.name).toLowerCase());
+    (groups[t.category || 'Other Tests'] = groups[t.category || 'Other Tests'] || []).push(t.name);
+  });
+  $('f-type').innerHTML = '<option value="">Select test / investigation</option>' +
+    Object.entries(groups).map(([g, l]) => `<optgroup label="${esc(g)}">${l.map(n => `<option value="${esc(n)}" data-cat="${esc(g)}">${esc(n)}</option>`).join('')}</optgroup>`).join('') +
+    `<option value="${OTHER}">Other (specify)…</option>`;
 }
 
-// ══════════ RESULTS ENTRY ══════════
-async function openResults(id) {
-  try {
-    if (!S.tests.length) await loadRefData();
-    const r = await API.get(`/laboratory/requests/${id}`);
-    if (r.status === 'cancelled') { Toast.warning('This request was cancelled'); return; }
-    current.request = r;
-    $('results-title').textContent = `Enter Results — ${r.requestId}`;
-    $('results-patient').innerHTML = `<div><b>Patient</b>${esc(r.patientName)}</div><div><b>Patient ID</b>${esc(r.patientId)}</div>
-      <div><b>Age / Sex</b>${esc(r.age ?? '—')} / ${esc(r.sex)}</div><div><b>Priority</b>${esc(r.priority.toUpperCase())}</div>`;
-    $('results-body').innerHTML = r.tests.map((t, i) => {
-      const def = testById(t.test);
-      const rng = def ? rangeText(def, pickRange(def, r.age, r.sex)) : (t.result?.referenceText || '');
-      const val = t.result?.value ?? '';
-      const input = def?.resultType === 'qualitative'
-        ? `<select class="form-control res-input" data-i="${i}" onchange="previewFlag(${i})"><option value="">— select —</option>${(def.qualitativeOptions || []).map(o => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
-        : `<input type="text" class="form-control res-input" data-i="${i}" value="${esc(val)}" oninput="previewFlag(${i})" placeholder="Enter value">`;
-      return `<tr data-item="${t._id}">
-        <td><strong>${esc(t.testName)}</strong><div style="font-size:11.5px;color:var(--text-light)">${esc(t.category)}</div></td>
-        <td>${input}</td><td>${esc(def?.unit || t.result?.unit || '')}</td><td>${esc(rng) || '—'}</td>
-        <td id="flag-${i}">${flagBadge(t.result?.flag)}</td>
-        <td><input type="text" class="form-control res-remarks" data-i="${i}" value="${esc(t.result?.remarks || '')}" placeholder="Optional"></td></tr>`;
-    }).join('');
-    Modal.open('results-modal');
-  } catch (e) { Toast.error(e.message); }
+function patientChanged() {
+  const v = $('f-patient').value;
+  $('new-patient-box').style.display = v === NEW_PATIENT ? '' : 'none';
+  // Pre-fill the address from the chosen patient (still editable)
+  let addr = '';
+  if (v.startsWith('p:')) addr = registered.find(p => p._id === v.slice(2))?.address || '';
+  if (v.startsWith('w:')) addr = labOnly.find(w => w._id === v.slice(2))?.address || '';
+  $('f-address').value = addr;
 }
-function previewFlag(i) {
-  const r = current.request, t = r.tests[i], def = testById(t.test);
-  const val = document.querySelector(`.res-input[data-i="${i}"]`).value.trim();
-  $(`flag-${i}`).innerHTML = flagBadge(evaluate(def, r.age, r.sex, val));
-}
-async function saveResults() {
-  const r = current.request;
-  const results = r.tests.map((t, i) => ({
-    itemId: t._id,
-    value: document.querySelector(`.res-input[data-i="${i}"]`).value.trim(),
-    remarks: document.querySelector(`.res-remarks[data-i="${i}"]`).value.trim()
-  })).filter(x => x.value);
-  if (!results.length) { Toast.warning('Enter at least one result'); return; }
-  try {
-    const out = await API.put(`/laboratory/requests/${r._id}/results`, { results });
-    Modal.close('results-modal');
-    if (out.criticals?.length) Toast.warning(`CRITICAL result: ${out.criticals.join(', ')} — notify the clinician immediately`);
-    else Toast.success('Results saved');
-    loadRequests(); loadStats(); if (S.tab === 'alerts') loadAlerts();
-  } catch (e) { Toast.error(e.message); }
+function typeChanged() { $('other-wrap').style.display = $('f-type').value === OTHER ? '' : 'none'; }
+
+async function openAdd() {
+  $('lab-form').reset();
+  await loadRefData();
+  fillSelects();
+  $('f-date').value = new Date().toISOString().slice(0, 10);
+  patientChanged(); typeChanged();
+  Modal.open('lab-modal');
 }
 
-// ══════════ REPORT ══════════
-const TRACK = [['pending', 'Requested'], ['sample-collected', 'Sample Collected'], ['in-progress', 'In Progress'], ['completed', 'Completed']];
-function reportTableHtml(r) {
-  return `<table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="background:#f5ede3"><th style="text-align:left;padding:8px">Test</th><th style="text-align:left;padding:8px">Result</th><th style="text-align:left;padding:8px">Unit</th><th style="text-align:left;padding:8px">Reference Range</th><th style="text-align:left;padding:8px">Flag</th></tr></thead>
-    <tbody>${r.tests.map(t => {
-      const f = t.result?.flag || '';
-      const bold = f && f !== 'Normal';
-      const colour = f.startsWith('Critical') ? '#c62828' : bold ? '#e65100' : '#2c1a0e';
-      return `<tr style="border-top:1px solid #e8d5c4">
-        <td style="padding:8px"><strong>${esc(t.testName)}</strong>${t.result?.remarks ? `<div style="font-size:11.5px;color:#8a6a52">${esc(t.result.remarks)}</div>` : ''}</td>
-        <td style="padding:8px;color:${colour};font-weight:${bold ? 700 : 400}">${t.status === 'completed' ? esc(t.result.value) : '<em style="color:#8a6a52">Pending</em>'}</td>
-        <td style="padding:8px">${esc(t.result?.unit || '')}</td><td style="padding:8px">${esc(t.result?.referenceText || '') || '—'}</td>
-        <td style="padding:8px;color:${colour};font-weight:600">${esc(f) || '—'}</td></tr>`;
-    }).join('')}</tbody></table>`;
-}
-function reportInfoHtml(r) {
-  return `<div class="pt-info"><div><b>Patient</b>${esc(r.patientName)}</div><div><b>Patient ID</b>${esc(r.patientId)}</div>
-    <div><b>Age / Sex</b>${esc(r.age ?? '—')} / ${esc(r.sex)}</div><div><b>Request ID</b>${esc(r.requestId)}</div>
-    <div><b>Requested By</b>${esc(r.requestedByName) || '—'}</div><div><b>Requested On</b>${Fmt.datetime(r.createdAt)}</div>
-    <div><b>Priority</b>${esc(r.priority.toUpperCase())}</div><div><b>Reported On</b>${r.completedAt ? Fmt.datetime(r.completedAt) : '—'}</div></div>`;
-}
-async function openReport(id) {
+async function saveRecord() {
+  const pv = $('f-patient').value;
+  const sel = $('f-type');
+  const isOther = sel.value === OTHER;
+  const testType = isOther ? $('f-other').value.trim() : sel.value;
+  const body = {
+    testType, category: isOther ? 'Other' : (sel.selectedOptions[0]?.dataset.cat || ''),
+    result: $('f-result').value.trim(), date: $('f-date').value,
+    address: $('f-address').value.trim(),
+    treatment: $('f-treatment').value.trim(), notes: $('f-notes').value.trim()
+  };
+  if (!pv) return Toast.warning('Please select a patient.');
+  if (pv === NEW_PATIENT) {
+    body.newPatient = { name: $('np-name').value.trim(), age: $('np-age').value, sex: $('np-sex').value, address: body.address };
+    if (!body.newPatient.name) return Toast.warning('Please enter the patient name.');
+    if (body.newPatient.age === '') return Toast.warning('Please enter the patient age.');
+    if (!body.newPatient.sex) return Toast.warning('Please select the patient sex.');
+  } else if (pv.startsWith('p:')) body.patient = pv.slice(2);
+  else body.walkInPatient = pv.slice(2);
+  if (!testType) return Toast.warning(isOther ? 'Please specify the test.' : 'Please select a test.');
+  if (!body.result) return Toast.warning('Please enter the test result.');
+  if (!body.date) return Toast.warning('Please select the date.');
+
+  $('save-btn').disabled = true;
   try {
-    const r = await API.get(`/laboratory/requests/${id}`);
-    current.reportRequest = r;
-    $('report-title').textContent = `Laboratory Report — ${r.requestId}`;
-    const idx = TRACK.findIndex(([k]) => k === r.status);
-    const tracker = r.status === 'cancelled' ? `<div class="alert alert-danger" style="margin-bottom:16px">This request was cancelled.</div>` :
-      `<div class="tracker">${TRACK.map(([k, l], i) => `<div class="step ${i < idx ? 'done' : i === idx ? (r.status === 'completed' ? 'done' : 'current') : ''}"><div class="dot">${i < idx || r.status === 'completed' ? '<i class="fa-solid fa-check"></i>' : i + 1}</div>${l}</div>`).join('')}</div>`;
-    const samples = (r.samples || []).length ? `<p style="font-size:12.5px;margin-top:14px;color:var(--text-mid)"><strong>Samples:</strong> ${r.samples.map(s => `${esc(s.sampleId)} (${esc(s.sampleType)}, ${esc(s.status)})`).join(' · ')}</p>` : '';
-    const crit = r.tests.filter(t => t.result?.flag?.startsWith('Critical'));
-    $('report-body').innerHTML = tracker +
-      (crit.length ? `<div class="alert alert-danger" style="margin-bottom:14px"><i class="fa-solid fa-triangle-exclamation"></i> Critical result: ${esc(crit.map(t => t.testName).join(', '))}</div>` : '') +
-      reportInfoHtml(r) + reportTableHtml(r) + samples +
-      (r.clinicalNotes ? `<p style="font-size:12.5px;margin-top:10px"><strong>Clinical notes:</strong> ${esc(r.clinicalNotes)}</p>` : '');
-    Modal.open('report-modal');
+    await API.post('/laboratory/records', body);
+    Toast.success('Lab test saved');
+    Modal.close('lab-modal');
+    loadRecords();
   } catch (e) { Toast.error(e.message); }
-}
-function printReport() {
-  const r = current.reportRequest; if (!r) return;
-  const w = window.open('', '_blank', 'width=850,height=900');
-  if (!w) { Toast.warning('Allow pop-ups to print the report'); return; }
-  const user = Auth.getUser();
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Lab Report ${esc(r.requestId)}</title>
-    <style>body{font-family:'DM Sans',Arial,sans-serif;color:#2c1a0e;padding:32px;max-width:800px;margin:auto}
-    h1{font-family:'Playfair Display',Georgia,serif;color:#3d2b1f;margin:0;font-size:24px} .hd{border-bottom:3px solid #6b4226;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
-    .pt-info{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 18px;background:#f5ede3;border-radius:6px;padding:12px 14px;margin-bottom:18px;font-size:13px}
-    .pt-info b{display:block;font-size:10.5px;text-transform:uppercase;color:#8a6a52}
-    .sig{margin-top:60px;display:flex;justify-content:space-between;font-size:12px}.sig div{border-top:1px solid #2c1a0e;padding-top:6px;width:220px;text-align:center}
-    .foot{margin-top:28px;font-size:11px;color:#8a6a52;text-align:center}@media print{body{padding:0}}</style></head><body>
-    <div class="hd"><div><h1>HEALTH-AID CLINIC</h1><div style="font-size:13px;color:#6b4226">Laboratory Report</div></div><div style="font-size:12px;text-align:right">Printed: ${Fmt.datetime(new Date())}</div></div>
-    ${reportInfoHtml(r)}${reportTableHtml(r)}
-    ${r.clinicalNotes ? `<p style="font-size:12.5px;margin-top:14px"><strong>Clinical notes:</strong> ${esc(r.clinicalNotes)}</p>` : ''}
-    <div class="sig"><div>Laboratory Scientist${user ? ` — ${esc(user.fullName || user.username)}` : ''}</div><div>Authorised Signature</div></div>
-    <div class="foot">Results flagged <strong>Low / High / Abnormal / Critical</strong> fall outside the stated reference range. This report is confidential.</div>
-    <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
-  w.document.close();
+  finally { $('save-btn').disabled = false; }
 }
 
-// ══════════ SAMPLES ══════════
-async function loadSamples() {
-  try {
-    S.samples = await API.get('/laboratory/samples?' + qs({ search: $('sm-search').value, status: $('sm-status').value, sampleType: $('sm-type').value }));
-    $('sm-table').innerHTML = !S.samples.length ? emptyRow(8, 'No samples found') : S.samples.map(s => `<tr>
-      <td><code>${esc(s.sampleId)}</code></td>
-      <td><strong>${esc(s.patientName)}</strong><div style="font-size:12px;color:var(--text-light)">${esc(s.patientId)}</div></td>
-      <td><code>${esc(s.requestId)}</code></td><td>${esc(s.sampleType)}${s.container ? `<div style="font-size:12px;color:var(--text-light)">${esc(s.container)}</div>` : ''}</td>
-      <td>${Fmt.datetime(s.collectedAt)}</td><td>${esc(s.collectedBy) || '—'}</td>
-      <td><span class="badge ${SAMPLE_CLS[s.status]}">${esc(s.status)}</span>${s.status === 'rejected' && s.rejectionReason ? `<div style="font-size:11.5px;color:var(--danger)">${esc(s.rejectionReason)}</div>` : ''}</td>
-      <td style="white-space:nowrap">
-        <select class="form-control" style="width:auto;padding:5px 8px;font-size:12px;display:inline-block" onchange="changeSampleStatus('${s._id}',this.value)">
-          ${['collected', 'received', 'processing', 'stored', 'disposed', 'rejected'].map(o => `<option ${o === s.status ? 'selected' : ''}>${o}</option>`).join('')}
-        </select>
-        <button class="btn btn-sm btn-secondary" onclick="editSample('${s._id}')"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteSample('${s._id}','${esc(s.sampleId)}')"><i class="fa-solid fa-trash"></i></button>
-      </td></tr>`).join('');
-  } catch (e) { Toast.error('Failed to load samples'); }
-}
-async function changeSampleStatus(id, status) {
-  let rejectionReason = '';
-  if (status === 'rejected') { rejectionReason = window.prompt('Reason for rejecting this sample?') || ''; if (!rejectionReason) { loadSamples(); return; } }
-  try { await API.patch(`/laboratory/samples/${id}/status`, { status, rejectionReason }); Toast.success('Sample status updated'); loadSamples(); }
-  catch (e) { Toast.error(e.message); loadSamples(); }
-}
-async function openSample(requestId) {
-  current.sample = null;
-  $('sample-title').textContent = 'Collect Sample';
-  $('sample-form').reset();
-  $('sm-request-group').style.display = '';
-  $('sm-sampletype').innerHTML = SAMPLE_TYPES.map(t => `<option>${t}</option>`).join('');
-  try {
-    const open = await API.get('/laboratory/requests?status=pending');
-    const more = await API.get('/laboratory/requests?status=sample-collected');
-    const inprog = await API.get('/laboratory/requests?status=in-progress');
-    const list = [...open, ...more, ...inprog];
-    $('sm-request').innerHTML = '<option value="">Select request...</option>' + list.map(r => `<option value="${r._id}">${esc(r.requestId)} — ${esc(r.patientName)}</option>`).join('');
-    if (requestId) { $('sm-request').value = requestId; suggestSampleType(); }
-    $('sm-request').onchange = suggestSampleType;
-    $('sample-form').elements.collectedAt.value = nowLocalInput();
-    $('sample-form').elements.collectedBy.value = Auth.getUser()?.fullName || Auth.getUser()?.username || '';
-    Modal.open('sample-modal');
-  } catch (e) { Toast.error(e.message); }
-}
-async function suggestSampleType() {
-  const id = $('sm-request').value; if (!id) return;
-  try {
-    if (!S.tests.length) await loadRefData();
-    const r = await API.get(`/laboratory/requests/${id}`);
-    const t = testById(r.tests[0]?.test);
-    if (t && SAMPLE_TYPES.includes(t.sampleType)) $('sm-sampletype').value = t.sampleType;
-  } catch (e) {}
-}
-function editSample(id) {
-  const s = S.samples.find(x => x._id === id); if (!s) return;
-  current.sample = id;
-  $('sample-title').textContent = `Edit Sample — ${s.sampleId}`;
-  $('sm-request-group').style.display = 'none';
-  $('sm-sampletype').innerHTML = [...new Set([...SAMPLE_TYPES, s.sampleType])].map(t => `<option>${esc(t)}</option>`).join('');
-  const f = $('sample-form'); f.reset();
-  fillForm(f, { ...s, collectedAt: '' });
-  const d = new Date(s.collectedAt); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  f.elements.collectedAt.value = d.toISOString().slice(0, 16);
-  Modal.open('sample-modal');
-}
-async function saveSample() {
-  const form = $('sample-form');
-  if (!current.sample && !form.elements.request.value) { Toast.warning('Select a test request'); return; }
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  const data = getFormData(form);
-  if (data.collectedAt) data.collectedAt = new Date(data.collectedAt).toISOString(); else delete data.collectedAt;
-  if (data.status === 'rejected' && !data.notes) { Toast.warning('Enter the rejection reason in Notes'); return; }
-  if (data.status === 'rejected') data.rejectionReason = data.notes;
-  try {
-    if (current.sample) { delete data.request; await API.put(`/laboratory/samples/${current.sample}`, data); Toast.success('Sample updated'); }
-    else { await API.post('/laboratory/samples', data); Toast.success('Sample recorded'); }
-    Modal.close('sample-modal'); loadSamples(); loadRequests(); loadStats();
-  } catch (e) { Toast.error(e.message); }
-}
-async function deleteSample(id, label) {
-  if (!window.confirm(`Delete sample "${label}"?`)) return;
-  try { await API.delete(`/laboratory/samples/${id}`); Toast.success('Deleted'); loadSamples(); }
-  catch (e) { Toast.error(e.message); }
-}
-
-// ══════════ ALERTS ══════════
-async function loadAlerts() {
-  try {
-    let list = await API.get('/laboratory/alerts?' + qs({ level: $('al-level').value, acknowledged: $('al-ack').value }));
-    const f = $('al-search').value.toLowerCase();
-    if (f) list = list.filter(a => [a.patientName, a.patientId, a.requestId, a.testName].some(v => (v || '').toLowerCase().includes(f)));
-    S.alerts = list;
-    $('al-table').innerHTML = !list.length ? emptyRow(8, 'No alerts — all results are within range') : list.map(a => `<tr class="${a.critical ? 'critical-row' : 'abnormal-row'}">
-      <td><strong>${esc(a.patientName)}</strong><div style="font-size:12px;color:var(--text-light)">${esc(a.patientId)}</div></td>
-      <td><code>${esc(a.requestId)}</code></td><td>${esc(a.testName)}</td>
-      <td><strong>${esc(a.value)}</strong> ${esc(a.unit)}</td><td>${esc(a.referenceText) || '—'}</td><td>${flagBadge(a.flag)}</td>
-      <td>${Fmt.datetime(a.enteredAt)}<div style="font-size:12px;color:var(--text-light)">${esc(a.enteredBy)}</div></td>
-      <td style="white-space:nowrap">
-        ${a.acknowledged ? `<span class="badge badge-success">Acknowledged</span><div style="font-size:11.5px;color:var(--text-light)">${esc(a.acknowledgedBy)}</div>`
-          : `<button class="btn btn-sm btn-success" onclick="acknowledge('${a.requestMongoId}','${a.itemId}')"><i class="fa-solid fa-check"></i> Acknowledge</button>`}
-        <button class="btn btn-sm btn-outline" title="View report" onclick="openReport('${a.requestMongoId}')"><i class="fa-solid fa-file-lines"></i></button>
-      </td></tr>`).join('');
-  } catch (e) { Toast.error('Failed to load alerts'); }
-}
-async function acknowledge(reqId, itemId) {
-  try { await API.patch(`/laboratory/requests/${reqId}/tests/${itemId}/acknowledge`, {}); Toast.success('Alert acknowledged'); loadAlerts(); loadStats(); }
-  catch (e) { Toast.error(e.message); }
-}
-
-// ══════════ TESTS ══════════
-async function loadTests() {
-  try {
-    S.tests = await API.get('/laboratory/tests?' + qs({ search: $('ts-search').value, category: $('ts-category').value }));
-    if (!$('ts-search').value && !$('ts-category').value) $('seed-btn').style.display = S.tests.length ? 'none' : '';
-    $('ts-table').innerHTML = !S.tests.length ? emptyRow(8, 'No laboratory tests found') : S.tests.map(t => {
-      const ranges = t.resultType === 'qualitative' ? `Normal: ${esc(t.normalOption)}` :
-        (t.referenceRanges || []).map(r => `${r.sex !== 'Any' ? r.sex + ': ' : ''}${esc(rangeText(t, r))}`).join('<br>') || '—';
-      return `<tr class="${t.active === false ? '' : ''}"><td><code>${esc(t.testId)}</code></td>
-        <td><strong>${esc(t.name)}</strong>${t.code ? `<div style="font-size:12px;color:var(--text-light)">${esc(t.code)}</div>` : ''}</td>
-        <td>${esc(t.category) || '—'}</td><td>${esc(t.sampleType)}</td><td style="font-size:12.5px">${ranges}</td>
-        <td>${Fmt.currency(t.price)}</td><td>${esc(t.turnaroundHours)}h</td>
-        <td style="white-space:nowrap"><button class="btn btn-sm btn-secondary" onclick="editTest('${t._id}')"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteTest('${t._id}','${esc(t.name)}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-    }).join('');
-  } catch (e) { Toast.error('Failed to load tests'); }
-}
-function toggleResultType() {
-  const q = $('ts-resulttype').value === 'qualitative';
-  $('qual-group').style.display = q ? '' : 'none';
-  $('ranges-group').style.display = q ? 'none' : '';
-  $('unit-group').style.display = q ? 'none' : '';
-}
-function addRangeRow(r = {}) {
-  const d = document.createElement('div'); d.className = 'range-row';
-  const n = (v) => v ?? '';
-  d.innerHTML = `<input class="form-control" data-f="label" placeholder="e.g. Adult" value="${esc(r.label || '')}">
-    <select class="form-control" data-f="sex">${['Any', 'Male', 'Female'].map(s => `<option ${s === (r.sex || 'Any') ? 'selected' : ''}>${s}</option>`).join('')}</select>
-    <input type="number" class="form-control" data-f="ageMin" value="${n(r.ageMin ?? 0)}"><input type="number" class="form-control" data-f="ageMax" value="${n(r.ageMax ?? 150)}">
-    <input type="number" step="any" class="form-control" data-f="low" value="${n(r.low)}"><input type="number" step="any" class="form-control" data-f="high" value="${n(r.high)}">
-    <input type="number" step="any" class="form-control" data-f="criticalLow" value="${n(r.criticalLow)}"><input type="number" step="any" class="form-control" data-f="criticalHigh" value="${n(r.criticalHigh)}">
-    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
-  $('ranges-list').appendChild(d);
-}
-function openTest() {
-  current.test = null;
-  $('test-title').textContent = 'Add Laboratory Test';
-  $('test-form').reset(); $('ranges-list').innerHTML = '';
-  $('ts-form-sample').innerHTML = SAMPLE_TYPES.map(t => `<option>${t}</option>`).join('');
-  $('ts-qual-options').value = 'Positive, Negative'; $('ts-qual-normal').value = 'Negative';
-  addRangeRow(); toggleResultType();
-  Modal.open('test-modal');
-}
-function editTest(id) {
-  const t = S.tests.find(x => x._id === id); if (!t) return;
-  current.test = id;
-  $('test-title').textContent = 'Edit Laboratory Test';
-  $('test-form').reset(); $('ranges-list').innerHTML = '';
-  $('ts-form-sample').innerHTML = [...new Set([...SAMPLE_TYPES, t.sampleType])].map(s => `<option>${esc(s)}</option>`).join('');
-  fillForm($('test-form'), t);
-  $('ts-qual-options').value = (t.qualitativeOptions || []).join(', '); $('ts-qual-normal').value = t.normalOption || '';
-  (t.referenceRanges || []).forEach(addRangeRow);
-  if (!(t.referenceRanges || []).length) addRangeRow();
-  toggleResultType();
-  Modal.open('test-modal');
-}
-async function saveTest() {
-  const form = $('test-form');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  const data = getFormData(form);
-  data.price = Number(data.price) || 0; data.turnaroundHours = Number(data.turnaroundHours) || 0;
-  if (data.resultType === 'qualitative') {
-    data.qualitativeOptions = $('ts-qual-options').value.split(',').map(s => s.trim()).filter(Boolean);
-    data.normalOption = $('ts-qual-normal').value.trim();
-    if (data.qualitativeOptions.length < 2 || !data.qualitativeOptions.map(o => o.toLowerCase()).includes(data.normalOption.toLowerCase())) { Toast.warning('Provide at least two options, including the normal result'); return; }
-    data.referenceRanges = []; data.unit = '';
-  } else {
-    data.referenceRanges = [...document.querySelectorAll('#ranges-list .range-row')].map(row => {
-      const g = (f) => row.querySelector(`[data-f="${f}"]`).value;
-      const num = (f) => g(f) === '' ? undefined : Number(g(f));
-      return { label: g('label'), sex: g('sex'), ageMin: num('ageMin') ?? 0, ageMax: num('ageMax') ?? 150, low: num('low'), high: num('high'), criticalLow: num('criticalLow'), criticalHigh: num('criticalHigh') };
-    }).filter(r => r.low != null || r.high != null);
-  }
-  try {
-    if (current.test) { await API.put(`/laboratory/tests/${current.test}`, data); Toast.success('Test updated'); }
-    else { await API.post('/laboratory/tests', data); Toast.success('Test added'); }
-    Modal.close('test-modal'); await loadRefData(); loadTests();
-  } catch (e) { Toast.error(e.message); }
-}
-async function deleteTest(id, name) {
-  if (!window.confirm(`Delete test "${name}"?`)) return;
-  try { await API.delete(`/laboratory/tests/${id}`); Toast.success('Deleted'); await loadRefData(); loadTests(); }
-  catch (e) { Toast.error(e.message); }
-}
-async function seedDefaults() {
-  try { const r = await API.post('/laboratory/tests/seed-defaults', {}); Toast.success(r.message); await loadRefData(); loadTests(); }
-  catch (e) { Toast.error(e.message); }
-}
-
-// ══════════ CATEGORIES ══════════
-async function loadCategories() {
-  try {
-    S.categories = await API.get('/laboratory/categories?' + qs({ search: $('ct-search').value }));
-    fillCategorySelects();
-    $('ct-table').innerHTML = !S.categories.length ? emptyRow(4, 'No categories found') : S.categories.map(c => `<tr>
-      <td><strong>${esc(c.name)}</strong></td><td>${esc(c.description) || '—'}</td><td><span class="badge badge-brown">${c.testCount}</span></td>
-      <td><button class="btn btn-sm btn-secondary" onclick="editCategory('${c._id}')"><i class="fa-solid fa-pen"></i></button>
-      <button class="btn btn-sm btn-danger" onclick="deleteCategory('${c._id}','${esc(c.name)}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('');
-  } catch (e) { Toast.error('Failed to load categories'); }
-}
-function openCategory() { current.category = null; $('category-title').textContent = 'Add Category'; $('category-form').reset(); Modal.open('category-modal'); }
-function editCategory(id) {
-  const c = S.categories.find(x => x._id === id); if (!c) return;
-  current.category = id; $('category-title').textContent = 'Edit Category'; fillForm($('category-form'), c); Modal.open('category-modal');
-}
-async function saveCategory() {
-  const form = $('category-form');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  try {
-    if (current.category) { await API.put(`/laboratory/categories/${current.category}`, getFormData(form)); Toast.success('Category updated'); }
-    else { await API.post('/laboratory/categories', getFormData(form)); Toast.success('Category added'); }
-    Modal.close('category-modal'); loadCategories(); loadRefData();
-  } catch (e) { Toast.error(e.message); }
-}
-async function deleteCategory(id, name) {
-  if (!window.confirm(`Delete category "${name}"?`)) return;
-  try { await API.delete(`/laboratory/categories/${id}`); Toast.success('Deleted'); loadCategories(); }
-  catch (e) { Toast.error(e.message); }
-}
-
-// ══════════ REAGENTS ══════════
-async function loadReagents() {
-  try {
-    S.reagents = await API.get('/laboratory/reagents?' + qs({ search: $('rg-search').value, lowStock: $('rg-low').checked }));
-    const soon = new Date(); soon.setDate(soon.getDate() + 30);
-    $('rg-table').innerHTML = !S.reagents.length ? emptyRow(9, 'No reagents found') : S.reagents.map(d => {
-      const out = d.quantity === 0, low = d.quantity <= d.lowStockThreshold;
-      const exp = d.expiryDate ? new Date(d.expiryDate) : null;
-      const expired = exp && exp < new Date(), expSoon = exp && !expired && exp < soon;
-      const status = expired ? '<span class="badge badge-danger">Expired</span>' : out ? '<span class="badge badge-danger">Out of Stock</span>' :
-        low ? '<span class="badge badge-warning">Low Stock</span>' : expSoon ? '<span class="badge badge-warning">Expiring Soon</span>' : '<span class="badge badge-success">In Stock</span>';
-      return `<tr class="${low || expired || expSoon ? 'low-stock' : ''}"><td><code>${esc(d.reagentId)}</code></td>
-        <td><strong>${esc(d.name)}</strong>${d.supplier ? `<div style="font-size:12px;color:var(--text-light)">${esc(d.supplier)}</div>` : ''}</td>
-        <td>${esc(d.category) || '—'}</td><td>${esc(d.lotNumber) || '—'}</td><td><strong>${d.quantity}</strong></td><td>${esc(d.unit)}</td>
-        <td>${d.expiryDate ? Fmt.date(d.expiryDate) : '—'}</td><td>${status}</td>
-        <td style="white-space:nowrap"><button class="btn btn-sm btn-success" title="Restock" onclick="openStock('${d._id}','restock')">+</button>
-        <button class="btn btn-sm btn-outline" title="Record usage" onclick="openStock('${d._id}','use')">−</button>
-        <button class="btn btn-sm btn-secondary" onclick="editReagent('${d._id}')"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteReagent('${d._id}','${esc(d.name)}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-    }).join('');
-  } catch (e) { Toast.error('Failed to load reagents'); }
-}
-function openReagent() { current.reagent = null; $('reagent-title').textContent = 'Add Reagent'; $('reagent-form').reset(); Modal.open('reagent-modal'); }
-function editReagent(id) {
-  const d = S.reagents.find(x => x._id === id); if (!d) return;
-  current.reagent = id; $('reagent-title').textContent = 'Edit Reagent'; fillForm($('reagent-form'), d); Modal.open('reagent-modal');
-}
-async function saveReagent() {
-  const form = $('reagent-form');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  const data = getFormData(form);
-  if (!data.expiryDate) delete data.expiryDate;
-  try {
-    if (current.reagent) { await API.put(`/laboratory/reagents/${current.reagent}`, data); Toast.success('Reagent updated'); }
-    else { await API.post('/laboratory/reagents', data); Toast.success('Reagent added'); }
-    Modal.close('reagent-modal'); loadReagents(); loadStats();
-  } catch (e) { Toast.error(e.message); }
-}
-async function deleteReagent(id, name) {
-  if (!window.confirm(`Delete "${name}"?`)) return;
-  try { await API.delete(`/laboratory/reagents/${id}`); Toast.success('Deleted'); loadReagents(); loadStats(); }
-  catch (e) { Toast.error(e.message); }
-}
-function openStock(id, mode) {
-  const d = S.reagents.find(x => x._id === id); if (!d) return;
-  current.stockId = id; current.stockMode = mode;
-  $('stock-title').textContent = mode === 'restock' ? 'Restock Reagent' : 'Record Usage';
-  $('stock-name').textContent = `${d.name} (${d.quantity} ${d.unit} in stock)`;
-  $('stock-qty').value = 1; Modal.open('stock-modal');
-}
-async function confirmStock() {
-  const qty = $('stock-qty').value;
-  if (!qty || qty < 1) { Toast.warning('Enter valid quantity'); return; }
-  try {
-    await API.patch(`/laboratory/reagents/${current.stockId}/${current.stockMode === 'restock' ? 'restock' : 'use'}`, { quantity: qty });
-    Toast.success(current.stockMode === 'restock' ? 'Restocked successfully' : 'Usage recorded');
-    Modal.close('stock-modal'); loadReagents(); loadStats();
-  } catch (e) { Toast.error(e.message); }
-}
-
-// ── SEARCH / FILTER WIRING ──
-const wire = (ids, fn, ev) => ids.forEach(id => $(id).addEventListener(ev, ev === 'input' ? debounce(fn) : fn));
-wire(['rq-search'], loadRequests, 'input'); wire(['rq-status', 'rq-priority', 'rq-from', 'rq-to'], loadRequests, 'change');
-wire(['iv-search'], loadInvestigations, 'input');
-wire(['sm-search'], loadSamples, 'input'); wire(['sm-status', 'sm-type'], loadSamples, 'change');
-wire(['al-search'], loadAlerts, 'input'); wire(['al-level', 'al-ack'], loadAlerts, 'change');
-wire(['ts-search'], loadTests, 'input'); wire(['ts-category'], loadTests, 'change');
-wire(['ct-search'], loadCategories, 'input');
-wire(['rg-search'], loadReagents, 'input'); wire(['rg-low'], loadReagents, 'change');
-$('rq-test-filter').addEventListener('input', renderTestPicker);
-$('rq-test-category').addEventListener('change', renderTestPicker);
-$('sm-type').innerHTML = '<option value="">All Sample Types</option>' + SAMPLE_TYPES.map(t => `<option>${t}</option>`).join('');
-
-// ── INIT ──
-loadRefData().then(() => { loadRequests(); loadStats(); });
+let searchTimer;
+$('search-input').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadRecords, 250); });
+loadRecords();
 </script>
 </body>
 </html>
