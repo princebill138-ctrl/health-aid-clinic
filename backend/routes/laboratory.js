@@ -415,6 +415,68 @@ router.delete('/requests/:id', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// ── PER-PATIENT LABORATORY RECORDS ──
+// Used by Patient Records → Clinical Notes → Laboratory. Reads and writes the
+// same LabRequest collection as the rest of the module, so everything entered
+// here also shows up under Test Requests / Results & Alerts.
+const recordDate = (r) => r.testDate || r.completedAt || r.createdAt;
+
+router.get('/patient-records/:patientId', protect, async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.patientId).select('name address');
+    if (!patient) return res.status(404).json({ message: 'Patient not found' });
+    const reqs = await LabRequest.find({ patient: patient._id, status: { $ne: 'cancelled' } });
+    const records = [];
+    reqs.forEach(r => r.tests.forEach(t => records.push({
+      _id: `${r._id}_${t._id}`, requestId: r.requestId,
+      patientName: r.patientName,
+      address: r.address || patient.address || '',
+      testType: t.testName, category: t.category || '',
+      result: t.result?.value || '', unit: t.result?.unit || '', flag: t.result?.flag || '',
+      treatment: r.treatment || '', notes: t.result?.remarks || r.clinicalNotes || '',
+      date: recordDate(r)
+    })));
+    records.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ patient: { _id: patient._id, name: patient.name, address: patient.address || '' }, records });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.post('/patient-records/:patientId', protect, async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.patientId);
+    if (!patient) return res.status(404).json({ message: 'Patient not found' });
+    const { testType, category, result, treatment, notes, date, address } = req.body;
+    if (!String(testType || '').trim()) return res.status(400).json({ message: 'Select the test / investigation type' });
+    if (!String(result || '').trim()) return res.status(400).json({ message: 'Enter the test result' });
+
+    // If the test exists in the catalogue, flag the result against its reference range
+    const def = await LabTest.findOne({ name: new RegExp(`^${String(testType).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    const ev = def ? evaluate(def, patient.age, patient.sex, String(result).trim()) : { flag: '', referenceText: '' };
+    const when = date ? new Date(`${String(date).slice(0, 10)}T12:00:00`) : new Date();
+    const testDate = isNaN(when.getTime()) ? new Date() : when;
+
+    const doc = await LabRequest.create({
+      requestId: await nextId(LabRequest, 'requestId', 'LAB', 5),
+      patient: patient._id, patientId: patient.patientId, patientName: patient.name, age: patient.age, sex: patient.sex,
+      address: String(address ?? patient.address ?? '').trim(),
+      treatment: String(treatment || '').trim(),
+      clinicalNotes: String(notes || '').trim(),
+      requestedByName: userName(req),
+      status: 'completed', completedAt: testDate, testDate,
+      tests: [{
+        test: def?._id, testName: String(testType).trim(), category: category || def?.category || '',
+        status: 'completed',
+        result: {
+          value: String(result).trim(), unit: def?.unit || '', flag: ev.flag, referenceText: ev.referenceText,
+          remarks: String(notes || '').trim(), enteredBy: userName(req), enteredAt: new Date()
+        }
+      }],
+      createdBy: req.user._id
+    });
+    res.status(201).json(doc);
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
 // ── SAMPLES ──
 router.get('/samples', protect, async (req, res) => {
   try {

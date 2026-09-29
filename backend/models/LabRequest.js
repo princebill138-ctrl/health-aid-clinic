@@ -31,6 +31,10 @@ const labRequestSchema = new mongoose.Schema({
   requestedByName: { type: String, default: '' },
   priority: { type: String, enum: ['routine', 'urgent', 'stat'], default: 'routine' },
   clinicalNotes: { type: String, default: '' },
+  // Optional fields used by the per-patient laboratory records (Patient Records → Clinical Notes → Laboratory)
+  address: { type: String, default: '' },
+  treatment: { type: String, default: '' },
+  testDate: { type: Date },
   tests: [requestTestSchema],
   status: { type: String, enum: ['pending', 'sample-collected', 'in-progress', 'completed', 'cancelled'], default: 'pending' },
   completedAt: { type: Date },

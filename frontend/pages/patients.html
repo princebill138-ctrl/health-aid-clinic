@@ -533,7 +533,7 @@ loadPatients();
       <!-- Tabs -->
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:2px solid var(--brown-pale);padding-bottom:10px">
         <button class="clinical-tab active" onclick="switchTab('complaints')" id="tab-complaints"><i class="fa-solid fa-comment-medical"></i> Complaints</button>
-        <button class="clinical-tab" onclick="switchTab('lab')" id="tab-lab"><i class="fa-solid fa-flask-vial"></i> Lab Investigations</button>
+        <button class="clinical-tab" onclick="switchTab('lab')" id="tab-lab"><i class="fa-solid fa-flask-vial"></i> Laboratory <span id="lab-count" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
         <button class="clinical-tab" onclick="switchTab('diagnosis')" id="tab-diagnosis"><i class="fa-solid fa-stethoscope"></i> Diagnosis</button>
         <button class="clinical-tab" onclick="switchTab('treatment')" id="tab-treatment"><i class="fa-solid fa-pills"></i> Treatment</button>
         <button class="clinical-tab" onclick="switchTab('detention')" id="tab-detention"><i class="fa-solid fa-bed-pulse"></i> Detention</button>
@@ -549,6 +549,22 @@ loadPatients();
         }
         .clinical-panel { display: none; }
         .clinical-panel.active { display: block; }
+        .lab-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+        .lab-head-name { font-weight:600; font-size:15px; }
+        .lab-head-addr { font-size:12.5px; color:var(--text-light); margin-top:2px; }
+        .lab-form { border:1.5px solid var(--brown-pale); border-radius:8px; padding:16px; margin-bottom:16px; background:#fdfaf7; }
+        .lab-form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+        .lab-card { border:1.5px solid var(--brown-pale); border-radius:8px; padding:12px 14px; margin-bottom:10px; background:#fff; }
+        .lab-card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+        .lab-card-test { font-weight:600; font-size:14px; }
+        .lab-card-cat { font-size:11.5px; color:var(--text-light); }
+        .lab-card-date { font-size:12px; color:var(--text-light); white-space:nowrap; }
+        .lab-card-result { margin:8px 0 0; font-size:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .lab-card-cols { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-top:10px; }
+        .lab-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--text-light); margin-bottom:2px; }
+        .lab-txt { font-size:13px; white-space:pre-wrap; }
+        .lab-empty { text-align:center; padding:26px 10px; color:var(--text-light); font-size:13.5px; border:1.5px dashed var(--brown-pale); border-radius:8px; }
+        @media (max-width: 600px) { .lab-card-cols { grid-template-columns:1fr; } .lab-head .btn { width:100%; } }
       </style>
 
       <!-- 1. Complaints -->
@@ -558,11 +574,58 @@ loadPatients();
         <textarea id="input-complaints" class="form-control" rows="6" placeholder="e.g. Patient presents with headache for 3 days, fever, and general body weakness..."></textarea>
       </div>
 
-      <!-- 2. Lab Investigations -->
+      <!-- 2. Laboratory -->
       <div class="clinical-panel" id="panel-lab">
-        <label class="form-label" style="font-weight:600">Laboratory Investigations</label>
-        <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">Record lab tests requested and their results.</p>
-        <textarea id="input-lab" class="form-control" rows="6" placeholder="e.g. FBC: WBC 11.2, RBC 4.5, HGB 13.2&#10;Malaria RDT: Positive&#10;Urinalysis: Normal..."></textarea>
+        <div class="lab-head">
+          <div>
+            <div class="lab-head-name" id="lab-patient-name">—</div>
+            <div class="lab-head-addr" id="lab-patient-addr"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="lab-add-btn" onclick="toggleLabForm(true)"><i class="fa-solid fa-plus"></i> Add New Test</button>
+        </div>
+
+        <form id="lab-form" class="lab-form" style="display:none" onsubmit="return false">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Patient Name</label>
+              <input type="text" id="lab-f-name" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Address</label>
+              <input type="text" id="lab-f-address" class="form-control" placeholder="Patient address">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Test / Investigation Type <span class="req">*</span></label>
+              <select id="lab-f-type" class="form-control" onchange="labTypeChanged()"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date <span class="req">*</span></label>
+              <input type="date" id="lab-f-date" class="form-control">
+            </div>
+            <div class="form-group col-span-2" id="lab-f-other-wrap" style="display:none">
+              <label class="form-label">Specify Test <span class="req">*</span></label>
+              <input type="text" id="lab-f-other" class="form-control" placeholder="Name of the test / investigation">
+            </div>
+            <div class="form-group col-span-2">
+              <label class="form-label">Test Result <span class="req">*</span></label>
+              <input type="text" id="lab-f-result" class="form-control" placeholder="e.g. Positive, 11.2 g/dL, 5.4 mmol/L, Normal">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Treatment</label>
+              <textarea id="lab-f-treatment" class="form-control" rows="3" placeholder="Treatment given / prescribed"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <textarea id="lab-f-notes" class="form-control" rows="3" placeholder="Additional remarks"></textarea>
+            </div>
+          </div>
+          <div class="lab-form-actions">
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleLabForm(false)">Cancel</button>
+            <button type="button" class="btn btn-primary btn-sm" id="lab-save-btn" onclick="saveLabRecord()"><i class="fa-solid fa-floppy-disk"></i> Save Test</button>
+          </div>
+        </form>
+
+        <div id="lab-history"></div>
       </div>
 
       <!-- 3. Diagnosis -->
@@ -591,7 +654,7 @@ loadPatients();
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="Modal.close('clinical-modal')">Close</button>
-      <button class="btn btn-primary" onclick="saveClinical()"><i class="fa-solid fa-floppy-disk"></i> Save Notes</button>
+      <button class="btn btn-primary" id="clinical-save-btn" onclick="saveClinical()"><i class="fa-solid fa-floppy-disk"></i> Save Notes</button>
     </div>
   </div>
 </div>
@@ -607,6 +670,8 @@ function switchTab(tab) {
   document.querySelectorAll('.clinical-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById('panel-' + tab).classList.add('active');
+  // Laboratory records save on their own (Add New Test), so hide the notes Save button there
+  document.getElementById('clinical-save-btn').style.display = tab === 'lab' ? 'none' : '';
 }
 
 function openClinical(id, name) {
@@ -614,16 +679,17 @@ function openClinical(id, name) {
   currentClinicalName = name;
   document.getElementById('clinical-modal-title').textContent = 'Clinical Notes — ' + name;
   // Clear inputs
-  ['complaints','lab','diagnosis','treatment','detention'].forEach(k => {
+  ['complaints','diagnosis','treatment','detention'].forEach(k => {
     document.getElementById('input-' + k).value = '';
   });
   switchTab('complaints');
   loadClinicalHistory(id);
+  initLab(id, name);   // laboratory history is loaded straight away for the selected patient
   Modal.open('clinical-modal');
 }
 
 async function saveClinical() {
-  const tabs = ['complaints','lab','diagnosis','treatment','detention'];
+  const tabs = ['complaints','diagnosis','treatment','detention'];
   const hasData = tabs.some(k => document.getElementById('input-' + k).value.trim());
   if (!hasData) { Toast.warning('Please enter at least one field before saving.'); return; }
 
@@ -631,7 +697,7 @@ async function saveClinical() {
     id: Date.now(),
     savedAt: new Date().toISOString(),
     complaints: document.getElementById('input-complaints').value.trim(),
-    lab: document.getElementById('input-lab').value.trim(),
+    lab: '',   // laboratory results are now recorded in the Laboratory tab
     diagnosis: document.getElementById('input-diagnosis').value.trim(),
     treatment: document.getElementById('input-treatment').value.trim(),
     detention: document.getElementById('input-detention').value.trim(),
@@ -650,7 +716,7 @@ async function saveClinical() {
     Toast.warning('Could not reach server — notes saved on this device only.');
   }
 
-  ['complaints','lab','diagnosis','treatment','detention'].forEach(k => {
+  ['complaints','diagnosis','treatment','detention'].forEach(k => {
     document.getElementById('input-' + k).value = '';
   });
   loadClinicalHistory(currentClinicalId);
@@ -741,5 +807,149 @@ async function printClinicalNote(index) {
     ${section('Treatment / Prescription', note.treatment)}
     ${section('Detention / Admission Notes', note.detention)}
     <div class="foot"><div class="sign">Attending Staff Signature</div></div>`);
+}
+</script>
+
+<script>
+// ── LABORATORY (inside Clinical Notes) ──
+const LAB_TEST_TYPES = {
+  'Haematology': ['Full Blood Count (FBC)', 'Haemoglobin (Hb)', 'Packed Cell Volume (PCV)', 'ESR', 'Blood Film', 'Blood Group & Rhesus', 'Hb Genotype', 'Sickling Test', 'Reticulocyte Count', 'Coagulation Profile (PT/INR)'],
+  'Biochemistry': ['Fasting Blood Glucose', 'Random Blood Glucose', 'HbA1c', 'Oral Glucose Tolerance Test (OGTT)', 'Lipid Profile', 'Liver Function Test (LFT)', 'Renal Function Test (Urea/Creatinine)', 'Serum Electrolytes', 'Serum Uric Acid', 'Serum Calcium', 'Thyroid Function Test', 'Cardiac Troponin', 'Serum Amylase'],
+  'Parasitology': ['Malaria Parasite (Microscopy)', 'Malaria RDT', 'Stool Microscopy', 'Stool Occult Blood', 'Urine Microscopy (Parasites)'],
+  'Microbiology': ['Urine Culture & Sensitivity', 'Blood Culture', 'Wound Swab Culture', 'High Vaginal Swab (HVS)', 'Throat Swab Culture', 'Sputum AFB / GeneXpert', 'Sputum Culture', 'Gram Stain'],
+  'Serology / Immunology': ['HIV Screening', 'Hepatitis B Surface Antigen (HBsAg)', 'Hepatitis C Antibody', 'VDRL / Syphilis', 'Widal Test', 'Typhoid IgM/IgG', 'H. pylori (Ag/Ab)', 'C-Reactive Protein (CRP)', 'Rheumatoid Factor', 'ASO Titre', 'COVID-19 Antigen'],
+  'Urine Tests': ['Urinalysis (Dipstick)', 'Urine Pregnancy Test (UPT)', 'Urine Protein / Albumin'],
+  'Hormones & Reproductive': ['Pregnancy Test (β-hCG)', 'Semen Analysis', 'PSA', 'FSH / LH', 'Testosterone', 'Prolactin', 'Progesterone'],
+  'Imaging & Other': ['Ultrasound Scan', 'X-Ray', 'ECG', 'Other Investigation']
+};
+const LAB_OTHER = '__other__';
+let labPatient = { id: null, name: '', address: '' };
+let labCatalogue = null;   // extra tests from the Laboratory Tests catalogue (optional)
+
+function labFlagBadge(flag) {
+  if (!flag) return '';
+  const cls = flag === 'Normal' ? 'badge-success' : flag.startsWith('Critical') ? 'badge-danger' : 'badge-warning';
+  return `<span class="badge ${cls}">${vEsc(flag)}</span>`;
+}
+
+async function buildLabTypeOptions() {
+  if (labCatalogue === null) {
+    try { labCatalogue = await API.get('/laboratory/tests?active=true'); } catch (e) { labCatalogue = []; }
+  }
+  const groups = {};
+  Object.entries(LAB_TEST_TYPES).forEach(([g, list]) => { groups[g] = list.slice(); });
+  const known = new Set(Object.values(LAB_TEST_TYPES).flat().map(n => n.toLowerCase()));
+  labCatalogue.forEach(t => {
+    if (known.has(String(t.name).toLowerCase())) return;
+    known.add(String(t.name).toLowerCase());
+    const g = t.category || 'Other Tests';
+    (groups[g] = groups[g] || []).push(t.name);
+  });
+  const other = groups['Imaging & Other'].filter(n => n !== 'Other Investigation');
+  groups['Imaging & Other'] = other;
+  const sel = document.getElementById('lab-f-type');
+  sel.innerHTML = '<option value="">Select test / investigation</option>' +
+    Object.entries(groups).filter(([, l]) => l.length).map(([g, l]) =>
+      `<optgroup label="${vEsc(g)}">${l.map(n => `<option value="${vEsc(n)}" data-cat="${vEsc(g)}">${vEsc(n)}</option>`).join('')}</optgroup>`).join('') +
+    `<option value="${LAB_OTHER}">Other (specify)…</option>`;
+}
+
+function labTypeChanged() {
+  const isOther = document.getElementById('lab-f-type').value === LAB_OTHER;
+  document.getElementById('lab-f-other-wrap').style.display = isOther ? '' : 'none';
+}
+
+function toggleLabForm(show) {
+  document.getElementById('lab-form').style.display = show ? '' : 'none';
+  document.getElementById('lab-add-btn').style.display = show ? 'none' : '';
+  if (show) {
+    document.getElementById('lab-f-name').value = labPatient.name;
+    document.getElementById('lab-f-address').value = labPatient.address;
+    document.getElementById('lab-f-type').value = '';
+    document.getElementById('lab-f-other').value = '';
+    document.getElementById('lab-f-result').value = '';
+    document.getElementById('lab-f-treatment').value = '';
+    document.getElementById('lab-f-notes').value = '';
+    document.getElementById('lab-f-date').value = new Date().toISOString().slice(0, 10);
+    labTypeChanged();
+  }
+}
+
+async function initLab(id, name) {
+  labPatient = { id, name, address: '' };
+  document.getElementById('lab-patient-name').textContent = name;
+  document.getElementById('lab-patient-addr').textContent = '';
+  document.getElementById('lab-history').innerHTML = '<div class="lab-empty">Loading laboratory history…</div>';
+  toggleLabForm(false);
+  buildLabTypeOptions();
+  await loadLabHistory();
+}
+
+async function loadLabHistory() {
+  const id = labPatient.id;
+  const el = document.getElementById('lab-history');
+  const countEl = document.getElementById('lab-count');
+  try {
+    const data = await API.get('/laboratory/patient-records/' + id);
+    if (id !== labPatient.id) return;   // user switched patient meanwhile
+    labPatient.address = data.patient.address || '';
+    document.getElementById('lab-patient-addr').innerHTML = labPatient.address
+      ? '<i class="fa-solid fa-location-dot"></i> ' + vEsc(labPatient.address) : '';
+    const records = data.records;
+    countEl.textContent = records.length;
+    countEl.style.display = records.length ? '' : 'none';
+    if (!records.length) {
+      el.innerHTML = '<div class="lab-empty"><i class="fa-solid fa-flask-vial" style="font-size:22px;display:block;margin-bottom:8px"></i>No laboratory tests recorded for this patient yet.<br>Use “Add New Test” to record the first one.</div>';
+      return;
+    }
+    el.innerHTML = `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);margin-bottom:10px">Laboratory History (${records.length})</div>` +
+      records.map(r => `
+      <div class="lab-card">
+        <div class="lab-card-top">
+          <div>
+            <div class="lab-card-test">${vEsc(r.testType)}</div>
+            ${r.category ? `<div class="lab-card-cat">${vEsc(r.category)}</div>` : ''}
+          </div>
+          <div class="lab-card-date"><i class="fa-regular fa-calendar"></i> ${Fmt.date(r.date)}</div>
+        </div>
+        <div class="lab-card-result">
+          ${r.result ? `<strong>${vEsc(r.result)}${r.unit && !String(r.result).includes(r.unit) ? ' ' + vEsc(r.unit) : ''}</strong>` : '<span class="badge badge-warning">Result pending</span>'}
+          ${labFlagBadge(r.flag)}
+        </div>
+        ${(r.treatment || r.notes || (r.address && r.address !== labPatient.address)) ? `<div class="lab-card-cols">
+          ${r.treatment ? `<div><div class="lab-lbl">Treatment</div><div class="lab-txt">${vEsc(r.treatment)}</div></div>` : ''}
+          ${r.notes ? `<div><div class="lab-lbl">Notes</div><div class="lab-txt">${vEsc(r.notes)}</div></div>` : ''}
+          ${r.address && r.address !== labPatient.address ? `<div><div class="lab-lbl">Address</div><div class="lab-txt">${vEsc(r.address)}</div></div>` : ''}
+        </div>` : ''}
+      </div>`).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="lab-empty">Could not load laboratory history. Please try again.</div>';
+  }
+}
+
+async function saveLabRecord() {
+  const sel = document.getElementById('lab-f-type');
+  const isOther = sel.value === LAB_OTHER;
+  const testType = isOther ? document.getElementById('lab-f-other').value.trim() : sel.value;
+  const result = document.getElementById('lab-f-result').value.trim();
+  const date = document.getElementById('lab-f-date').value;
+  if (!testType) { Toast.warning(isOther ? 'Please specify the test.' : 'Please select a test type.'); return; }
+  if (!result) { Toast.warning('Please enter the test result.'); return; }
+  if (!date) { Toast.warning('Please select the test date.'); return; }
+  const btn = document.getElementById('lab-save-btn');
+  btn.disabled = true;
+  try {
+    await API.post('/laboratory/patient-records/' + labPatient.id, {
+      testType, result, date,
+      category: isOther ? 'Other' : (sel.selectedOptions[0]?.dataset.cat || ''),
+      address: document.getElementById('lab-f-address').value.trim(),
+      treatment: document.getElementById('lab-f-treatment').value.trim(),
+      notes: document.getElementById('lab-f-notes').value.trim()
+    });
+    Toast.success('Laboratory test saved');
+    toggleLabForm(false);
+    await loadLabHistory();
+  } catch (e) { Toast.error(e.message); }
+  finally { btn.disabled = false; }
 }
 </script>
