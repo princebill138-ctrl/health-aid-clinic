@@ -532,11 +532,11 @@ loadPatients();
     <div class="modal-body">
       <!-- Tabs -->
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:2px solid var(--brown-pale);padding-bottom:10px">
-        <button class="clinical-tab active" onclick="switchTab('complaints')" id="tab-complaints"><i class="fa-solid fa-comment-medical"></i> Complaints</button>
+        <button class="clinical-tab active" onclick="switchTab('complaints')" id="tab-complaints"><i class="fa-solid fa-comment-medical"></i> Complaints <span id="count-complaints" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
         <button class="clinical-tab" onclick="switchTab('lab')" id="tab-lab"><i class="fa-solid fa-flask-vial"></i> Laboratory <span id="lab-count" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
-        <button class="clinical-tab" onclick="switchTab('diagnosis')" id="tab-diagnosis"><i class="fa-solid fa-stethoscope"></i> Diagnosis</button>
-        <button class="clinical-tab" onclick="switchTab('treatment')" id="tab-treatment"><i class="fa-solid fa-pills"></i> Treatment</button>
-        <button class="clinical-tab" onclick="switchTab('detention')" id="tab-detention"><i class="fa-solid fa-bed-pulse"></i> Detention</button>
+        <button class="clinical-tab" onclick="switchTab('diagnosis')" id="tab-diagnosis"><i class="fa-solid fa-stethoscope"></i> Diagnosis <span id="count-diagnosis" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
+        <button class="clinical-tab" onclick="switchTab('treatment')" id="tab-treatment"><i class="fa-solid fa-pills"></i> Treatment <span id="count-treatment" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
+        <button class="clinical-tab" onclick="switchTab('detention')" id="tab-detention"><i class="fa-solid fa-bed-pulse"></i> Detention <span id="count-detention" class="badge badge-brown" style="display:none;margin-left:4px"></span></button>
       </div>
       <style>
         .clinical-tab {
@@ -572,6 +572,7 @@ loadPatients();
         <label class="form-label" style="font-weight:600">Patient Complaints</label>
         <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">Describe the patient's presenting complaints and symptoms.</p>
         <textarea id="input-complaints" class="form-control" rows="6" placeholder="e.g. Patient presents with headache for 3 days, fever, and general body weakness..."></textarea>
+        <div class="cat-history" id="history-complaints"></div>
       </div>
 
       <!-- 2. Laboratory -->
@@ -626,6 +627,7 @@ loadPatients();
         </form>
 
         <div id="lab-history"></div>
+        <div class="cat-history" id="history-lab"></div>
       </div>
 
       <!-- 3. Diagnosis -->
@@ -633,6 +635,7 @@ loadPatients();
         <label class="form-label" style="font-weight:600">Diagnosis</label>
         <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">Enter the clinical diagnosis or differential diagnoses.</p>
         <textarea id="input-diagnosis" class="form-control" rows="6" placeholder="e.g. 1. Malaria (confirmed)&#10;2. Mild dehydration&#10;DDx: Typhoid fever..."></textarea>
+        <div class="cat-history" id="history-diagnosis"></div>
       </div>
 
       <!-- 4. Treatment / Prescription -->
@@ -640,6 +643,7 @@ loadPatients();
         <label class="form-label" style="font-weight:600">Treatment / Prescription</label>
         <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">List prescribed medications, dosages, and treatment instructions.</p>
         <textarea id="input-treatment" class="form-control" rows="6" placeholder="e.g. 1. Artemether-Lumefantrine 80/480mg — 1 tab BD x 3 days&#10;2. Paracetamol 500mg — 1 tab TDS PRN&#10;3. ORS — 1 sachet TDS x 2 days&#10;Review in 3 days or if symptoms worsen..."></textarea>
+        <div class="cat-history" id="history-treatment"></div>
       </div>
 
       <!-- 5. Detention -->
@@ -647,10 +651,9 @@ loadPatients();
         <label class="form-label" style="font-weight:600">Detention / Admission Notes</label>
         <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">Record admission details, ward notes, and progress observations.</p>
         <textarea id="input-detention" class="form-control" rows="6" placeholder="e.g. Patient admitted to ward A, bed 3.&#10;Date admitted: 23/05/2026&#10;Condition on admission: Stable&#10;Progress notes: Patient responding to treatment, fever subsiding..."></textarea>
+        <div class="cat-history" id="history-detention"></div>
       </div>
 
-      <!-- Saved entries list -->
-      <div id="clinical-history" style="margin-top:20px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="Modal.close('clinical-modal')">Close</button>
@@ -746,51 +749,50 @@ const CLINICAL_CATEGORIES = [
   { key: 'diagnosis',  label: 'Diagnosis',                icon: 'fa-stethoscope' },
   { key: 'treatment',  label: 'Treatment / Prescription', icon: 'fa-pills' },
   { key: 'detention',  label: 'Detention / Admission',    icon: 'fa-bed-pulse' },
-  { key: 'lab',        label: 'Lab Investigations (earlier notes)', icon: 'fa-flask-vial' }
+  { key: 'lab',        label: 'Laboratory',               icon: 'fa-flask-vial' }
 ];
 let clinicalEditing = null;   // { index, field } while an entry is being edited
 
 function renderClinicalHistory() {
-  const el = document.getElementById('clinical-history');
-  const records = clinicalRecords;
-  const groups = CLINICAL_CATEGORIES.map(c => ({
-    ...c,
-    items: records.map((r, i) => ({ r, i })).filter(x => (x.r[c.key] || '').trim())
-  })).filter(g => g.items.length);
-  if (!groups.length) { el.innerHTML = ''; return; }
-
   const btn = 'style="padding:3px 8px"';
-  el.innerHTML = `
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);margin-bottom:10px">Clinical Notes</div>
-    ${groups.map(g => `
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:var(--brown-mid);border-bottom:2px solid var(--brown-pale);padding-bottom:6px;margin-bottom:8px">
-          <i class="fa-solid ${g.icon}"></i> ${g.label} <span class="badge badge-brown">${g.items.length}</span>
-        </div>
-        ${g.items.map(({ r, i }) => {
-          const editing = clinicalEditing && clinicalEditing.index === i && clinicalEditing.field === g.key;
-          return `
-          <div style="border:1.5px solid var(--brown-pale);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fdfaf7">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-              <span style="font-size:12px;color:var(--text-light)">
-                ${new Date(r.savedAt).toLocaleString('en-GB')}${r.editedAt ? ' · edited' : ''}${r._id ? '' : ' · saved on this device only'}
-              </span>
-              <span style="display:flex;gap:6px;flex-shrink:0">
-                <button class="btn btn-sm btn-secondary" ${btn} onclick="printClinicalNote(${i})" title="Print the full note this entry belongs to"><i class="fa-solid fa-print"></i></button>
-                <button class="btn btn-sm btn-secondary" ${btn} onclick="editClinicalEntry(${i},'${g.key}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                <button class="btn btn-sm btn-danger" ${btn} onclick="deleteClinicalEntry(${i},'${g.key}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
-              </span>
-            </div>
-            ${editing
-              ? `<textarea id="clinical-edit-input" class="form-control" rows="4">${vEsc(r[g.key])}</textarea>
-                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
-                   <button class="btn btn-outline btn-sm" onclick="cancelClinicalEdit()">Cancel</button>
-                   <button class="btn btn-primary btn-sm" onclick="saveClinicalEdit()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-                 </div>`
-              : `<div style="font-size:13px;white-space:pre-wrap">${vEsc(r[g.key])}</div>`}
-          </div>`;
-        }).join('')}
-      </div>`).join('')}`;
+  CLINICAL_CATEGORIES.forEach(c => {
+    const el = document.getElementById('history-' + c.key);
+    if (!el) return;
+    const items = clinicalRecords.map((r, i) => ({ r, i })).filter(x => (x.r[c.key] || '').trim());
+
+    // count badge on the tab (the Laboratory tab keeps its own count of lab records)
+    const badge = document.getElementById('count-' + c.key);
+    if (badge) { badge.textContent = items.length; badge.style.display = items.length ? '' : 'none'; }
+
+    if (!items.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);margin:20px 0 10px;padding-top:14px;border-top:2px solid var(--brown-pale)">
+        ${c.key === 'lab' ? 'Earlier Lab Notes' : 'Saved ' + c.label} (${items.length})
+      </div>
+      ${items.map(({ r, i }) => {
+        const editing = clinicalEditing && clinicalEditing.index === i && clinicalEditing.field === c.key;
+        return `
+        <div style="border:1.5px solid var(--brown-pale);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fdfaf7">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--text-light)">
+              ${new Date(r.savedAt).toLocaleString('en-GB')}${r.editedAt ? ' · edited' : ''}${r._id ? '' : ' · saved on this device only'}
+            </span>
+            <span style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-sm btn-secondary" ${btn} onclick="printClinicalNote(${i})" title="Print the full note this entry belongs to"><i class="fa-solid fa-print"></i></button>
+              <button class="btn btn-sm btn-secondary" ${btn} onclick="editClinicalEntry(${i},'${c.key}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-sm btn-danger" ${btn} onclick="deleteClinicalEntry(${i},'${c.key}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+          ${editing
+            ? `<textarea id="clinical-edit-input" class="form-control" rows="4">${vEsc(r[c.key])}</textarea>
+               <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+                 <button class="btn btn-outline btn-sm" onclick="cancelClinicalEdit()">Cancel</button>
+                 <button class="btn btn-primary btn-sm" onclick="saveClinicalEdit()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+               </div>`
+            : `<div style="font-size:13px;white-space:pre-wrap">${vEsc(r[c.key])}</div>`}
+        </div>`;
+      }).join('')}`;
+  });
 }
 
 function editClinicalEntry(index, field) {
