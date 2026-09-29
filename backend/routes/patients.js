@@ -81,6 +81,34 @@ router.get('/:id/clinical', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// PUT /api/patients/:id/clinical/:noteId - Edit a clinical note (only the fields sent are changed)
+router.put('/:id/clinical/:noteId', protect, async (req, res) => {
+  try {
+    const set = { 'clinicalNotes.$.editedAt': new Date() };
+    ['complaints', 'lab', 'diagnosis', 'treatment', 'detention'].forEach(f => {
+      if (typeof req.body[f] === 'string') set['clinicalNotes.$.' + f] = req.body[f].trim();
+    });
+    const patient = await Patient.findOneAndUpdate(
+      { _id: req.params.id, 'clinicalNotes._id': req.params.noteId },
+      { $set: set }, { new: true }
+    );
+    if (!patient) return res.status(404).json({ message: 'Clinical note not found' });
+    res.json({ message: 'Clinical note updated' });
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
+// DELETE /api/patients/:id/clinical/:noteId - Delete a clinical note
+router.delete('/:id/clinical/:noteId', protect, async (req, res) => {
+  try {
+    const patient = await Patient.findOneAndUpdate(
+      { _id: req.params.id, 'clinicalNotes._id': req.params.noteId },
+      { $pull: { clinicalNotes: { _id: req.params.noteId } } }, { new: true }
+    );
+    if (!patient) return res.status(404).json({ message: 'Clinical note not found' });
+    res.json({ message: 'Clinical note deleted' });
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
 // POST /api/patients/:id/vitals - Save a vitals reading for a patient
 router.post('/:id/vitals', protect, async (req, res) => {
   try {

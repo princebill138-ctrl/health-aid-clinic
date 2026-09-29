@@ -21,6 +21,7 @@ const patientSchema = new mongoose.Schema({
     treatment: { type: String, default: '' },
     detention: { type: String, default: '' },
     savedAt: { type: Date, default: Date.now },
+    editedAt: { type: Date },
     savedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }],
   vitals: [{

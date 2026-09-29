@@ -737,43 +737,111 @@ async function loadClinicalHistory(id) {
   records = [...records, ...local].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
   clinicalRecords = records;
 
+  renderClinicalHistory();
+}
+
+// Categories the notes are grouped under (order = display order)
+const CLINICAL_CATEGORIES = [
+  { key: 'complaints', label: 'Complaints',               icon: 'fa-comment-medical' },
+  { key: 'diagnosis',  label: 'Diagnosis',                icon: 'fa-stethoscope' },
+  { key: 'treatment',  label: 'Treatment / Prescription', icon: 'fa-pills' },
+  { key: 'detention',  label: 'Detention / Admission',    icon: 'fa-bed-pulse' },
+  { key: 'lab',        label: 'Lab Investigations (earlier notes)', icon: 'fa-flask-vial' }
+];
+let clinicalEditing = null;   // { index, field } while an entry is being edited
+
+function renderClinicalHistory() {
   const el = document.getElementById('clinical-history');
-  if (!records.length) { el.innerHTML = ''; return; }
+  const records = clinicalRecords;
+  const groups = CLINICAL_CATEGORIES.map(c => ({
+    ...c,
+    items: records.map((r, i) => ({ r, i })).filter(x => (x.r[c.key] || '').trim())
+  })).filter(g => g.items.length);
+  if (!groups.length) { el.innerHTML = ''; return; }
 
-  const block = (label, val) => val
-    ? `<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase">${label}</div><div style="font-size:13px;white-space:pre-wrap">${vEsc(val)}</div></div>`
-    : '';
-
+  const btn = 'style="padding:3px 8px"';
   el.innerHTML = `
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);margin-bottom:10px">
-      Clinical Notes (${records.length})
-    </div>
-    ${records.map((r, i) => `
-      <div style="border:1.5px solid var(--brown-pale);border-radius:8px;padding:14px;margin-bottom:10px;background:#fdfaf7">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
-          <strong style="font-size:13px">Clinical Note — ${new Date(r.savedAt).toLocaleString('en-GB')}${r._id ? '' : ' <span style="font-weight:400;color:var(--text-light)">(saved on this device only)</span>'}</strong>
-          <span style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn btn-sm btn-secondary" onclick="printClinicalNote(${i})" title="Print this clinical note"><i class="fa-solid fa-print"></i> Print</button>
-            ${r._id ? '' : `<button class="btn btn-sm btn-danger" onclick="deleteClinicalEntry('${id}',${r.id})"><i class="fa-solid fa-trash"></i></button>`}
-          </span>
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);margin-bottom:10px">Clinical Notes</div>
+    ${groups.map(g => `
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:var(--brown-mid);border-bottom:2px solid var(--brown-pale);padding-bottom:6px;margin-bottom:8px">
+          <i class="fa-solid ${g.icon}"></i> ${g.label} <span class="badge badge-brown">${g.items.length}</span>
         </div>
-        ${block('Complaints', r.complaints)}
-        ${block('Lab Investigations', r.lab)}
-        ${block('Diagnosis', r.diagnosis)}
-        ${block('Treatment / Prescription', r.treatment)}
-        ${block('Detention / Admission', r.detention)}
+        ${g.items.map(({ r, i }) => {
+          const editing = clinicalEditing && clinicalEditing.index === i && clinicalEditing.field === g.key;
+          return `
+          <div style="border:1.5px solid var(--brown-pale);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fdfaf7">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--text-light)">
+                ${new Date(r.savedAt).toLocaleString('en-GB')}${r.editedAt ? ' · edited' : ''}${r._id ? '' : ' · saved on this device only'}
+              </span>
+              <span style="display:flex;gap:6px;flex-shrink:0">
+                <button class="btn btn-sm btn-secondary" ${btn} onclick="printClinicalNote(${i})" title="Print the full note this entry belongs to"><i class="fa-solid fa-print"></i></button>
+                <button class="btn btn-sm btn-secondary" ${btn} onclick="editClinicalEntry(${i},'${g.key}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="btn btn-sm btn-danger" ${btn} onclick="deleteClinicalEntry(${i},'${g.key}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+              </span>
+            </div>
+            ${editing
+              ? `<textarea id="clinical-edit-input" class="form-control" rows="4">${vEsc(r[g.key])}</textarea>
+                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+                   <button class="btn btn-outline btn-sm" onclick="cancelClinicalEdit()">Cancel</button>
+                   <button class="btn btn-primary btn-sm" onclick="saveClinicalEdit()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                 </div>`
+              : `<div style="font-size:13px;white-space:pre-wrap">${vEsc(r[g.key])}</div>`}
+          </div>`;
+        }).join('')}
       </div>`).join('')}`;
 }
 
-function deleteClinicalEntry(id, entryId) {
-  // Only entries still stranded in this device's localStorage (never
-  // reached the server) can be removed here.
-  if (!confirm('Delete this clinical entry?')) return;
-  let stored = JSON.parse(localStorage.getItem('clinical_' + id) || '[]');
-  stored = stored.filter(r => r.id !== entryId);
-  localStorage.setItem('clinical_' + id, JSON.stringify(stored));
-  loadClinicalHistory(id);
-  Toast.success('Entry deleted');
+function editClinicalEntry(index, field) {
+  clinicalEditing = { index, field };
+  renderClinicalHistory();
+  const ta = document.getElementById('clinical-edit-input');
+  if (ta) ta.focus();
+}
+function cancelClinicalEdit() { clinicalEditing = null; renderClinicalHistory(); }
+
+// Apply a change to one note. Notes saved to the server use their _id;
+// notes still stranded on this device live in localStorage.
+async function updateClinicalNote(note, changes) {
+  const fields = ['complaints', 'lab', 'diagnosis', 'treatment', 'detention'];
+  const merged = { ...note, ...changes };
+  const isEmpty = !fields.some(f => (merged[f] || '').trim());
+  if (note._id) {
+    if (isEmpty) await API.delete('/patients/' + currentClinicalId + '/clinical/' + note._id);
+    else await API.put('/patients/' + currentClinicalId + '/clinical/' + note._id, changes);
+  } else {
+    let stored = JSON.parse(localStorage.getItem('clinical_' + currentClinicalId) || '[]');
+    stored = isEmpty ? stored.filter(r => r.id !== note.id)
+                     : stored.map(r => r.id === note.id ? { ...r, ...changes, editedAt: new Date().toISOString() } : r);
+    localStorage.setItem('clinical_' + currentClinicalId, JSON.stringify(stored));
+  }
+}
+
+async function saveClinicalEdit() {
+  if (!clinicalEditing) return;
+  const { index, field } = clinicalEditing;
+  const note = clinicalRecords[index];
+  const value = document.getElementById('clinical-edit-input').value.trim();
+  if (!value) { Toast.warning('Text cannot be empty. Use the delete button to remove this entry.'); return; }
+  try {
+    await updateClinicalNote(note, { [field]: value });
+    Toast.success('Clinical note updated');
+    clinicalEditing = null;
+    await loadClinicalHistory(currentClinicalId);
+  } catch (e) { Toast.error(e.message); }
+}
+
+async function deleteClinicalEntry(index, field) {
+  const note = clinicalRecords[index];
+  const cat = CLINICAL_CATEGORIES.find(c => c.key === field).label;
+  if (!note || !confirm('Delete this ' + cat + ' entry?')) return;
+  try {
+    await updateClinicalNote(note, { [field]: '' });
+    Toast.success('Entry deleted');
+    clinicalEditing = null;
+    await loadClinicalHistory(currentClinicalId);
+  } catch (e) { Toast.error(e.message); }
 }
 
 // Print ONE clinical note, for the ONE patient whose record is open.
