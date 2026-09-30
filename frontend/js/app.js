@@ -1,6 +1,6 @@
 // ── API BASE ──
 const API = (() => {
- const BASE = 'https://health-aid-clinic.onrender.com/api';
+ const BASE = 'https://health-aid-cli.onrender.com/api';
 
   const headers = () => {
     const token = localStorage.getItem('token');
@@ -9,7 +9,12 @@ const API = (() => {
 
   const handle = async (res) => {
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || 'Request failed');
+    if (!res.ok) {
+      // A 404 with no JSON message means the server has no such route,
+      // i.e. the backend on Render has not been updated/redeployed yet.
+      if (res.status === 404 && !data.message) throw new Error('Server not updated yet (404) - push the backend files and wait for Render to redeploy');
+      throw new Error(data.message || 'Request failed (HTTP ' + res.status + ')');
+    }
     return data;
   };
 
