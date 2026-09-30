@@ -554,6 +554,69 @@ router.post('/records', protect, async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
+// ── EDIT / REMOVE A LABORATORY RECORD ──
+// :requestId = LabRequest _id, :itemId = the test inside it (the two halves of a record's _id).
+router.put('/records/:requestId/:itemId', protect, async (req, res) => {
+  try {
+    const r = await LabRequest.findById(req.params.requestId);
+    const item = r?.tests.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Laboratory record not found' });
+    const { testType, category, result, treatment, notes, date, address } = req.body;
+    if (!String(testType || '').trim()) return res.status(400).json({ message: 'Select the test / investigation type' });
+    if (!String(result || '').trim()) return res.status(400).json({ message: 'Enter the test result' });
+
+    const name = String(testType).trim(), value = String(result).trim();
+    const def = await LabTest.findOne({ name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    const ev = def ? evaluate(def, r.age, r.sex, value) : { flag: '', referenceText: '' };
+    const changed = item.result?.value !== value;
+    const old = item.result?.toObject ? item.result.toObject() : (item.result || {});
+
+    item.testName = name;
+    item.test = def?._id;
+    item.category = category || def?.category || item.category || '';
+    item.status = 'completed';
+    item.result = {
+      ...old,
+      value, unit: def?.unit || '', flag: ev.flag, referenceText: ev.referenceText,
+      remarks: String(notes || '').trim(),
+      enteredBy: userName(req), enteredAt: new Date(),
+      // A changed value must be re-acknowledged
+      acknowledged: changed ? false : !!old.acknowledged,
+      acknowledgedBy: changed ? '' : old.acknowledgedBy,
+      acknowledgedAt: changed ? undefined : old.acknowledgedAt
+    };
+
+    if (address !== undefined) r.address = String(address).trim();
+    if (treatment !== undefined) r.treatment = String(treatment).trim();
+    if (r.tests.length === 1) r.clinicalNotes = String(notes || '').trim();
+    if (date) {
+      const when = new Date(`${String(date).slice(0, 10)}T12:00:00`);
+      if (!isNaN(when.getTime())) r.testDate = when;
+    }
+    r.status = deriveStatus(r);
+    if (r.status === 'completed') r.completedAt = r.testDate || r.completedAt || new Date();
+    await r.save();
+    res.json({ message: 'Laboratory record updated' });
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
+router.delete('/records/:requestId/:itemId', protect, async (req, res) => {
+  try {
+    const r = await LabRequest.findById(req.params.requestId);
+    const item = r?.tests.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Laboratory record not found' });
+    if (r.tests.length <= 1) {
+      await LabSample.deleteMany({ request: r._id });
+      await r.deleteOne();
+    } else {
+      r.tests.pull(item._id);
+      r.status = deriveStatus(r);
+      await r.save();
+    }
+    res.json({ message: 'Laboratory record deleted' });
+  } catch (err) { res.status(400).json({ message: err.message }); }
+});
+
 // ── SAMPLES ──
 router.get('/samples', protect, async (req, res) => {
   try {

@@ -894,6 +894,8 @@ const LAB_TEST_TYPES = {
 };
 const LAB_OTHER = '__other__';
 let labPatient = { id: null, name: '', address: '' };
+let labRecords = [];      // records shown in the history list
+let labEditing = null;    // { requestId, itemId } while editing an existing test
 let labCatalogue = null;   // extra tests from the Laboratory Tests catalogue (optional)
 
 function labFlagBadge(flag) {
@@ -930,9 +932,11 @@ function labTypeChanged() {
 }
 
 function toggleLabForm(show) {
+  if (!show) labEditing = null;
   document.getElementById('lab-form').style.display = show ? '' : 'none';
   document.getElementById('lab-add-btn').style.display = show ? 'none' : '';
-  if (show) {
+  document.getElementById('lab-save-btn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (labEditing ? 'Update Test' : 'Save Test');
+  if (show && !labEditing) {
     document.getElementById('lab-f-name').value = labPatient.name;
     document.getElementById('lab-f-address').value = labPatient.address;
     document.getElementById('lab-f-type').value = '';
@@ -966,6 +970,7 @@ async function loadLabHistory() {
     document.getElementById('lab-patient-addr').innerHTML = labPatient.address
       ? '<i class="fa-solid fa-location-dot"></i> ' + vEsc(labPatient.address) : '';
     const records = data.records;
+    labRecords = records;
     countEl.textContent = records.length;
     countEl.style.display = records.length ? '' : 'none';
     if (!records.length) {
@@ -980,7 +985,11 @@ async function loadLabHistory() {
             <div class="lab-card-test">${vEsc(r.testType)}</div>
             ${r.category ? `<div class="lab-card-cat">${vEsc(r.category)}</div>` : ''}
           </div>
-          <div class="lab-card-date"><i class="fa-regular fa-calendar"></i> ${Fmt.date(r.date)}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="lab-card-date"><i class="fa-regular fa-calendar"></i> ${Fmt.date(r.date)}</span>
+            <button class="btn btn-sm btn-secondary" style="padding:3px 8px" onclick="editLabRecord('${r._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-sm btn-danger" style="padding:3px 8px" onclick="deleteLabRecord('${r._id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          </div>
         </div>
         <div class="lab-card-result">
           ${r.result ? `<strong>${vEsc(r.result)}${r.unit && !String(r.result).includes(r.unit) ? ' ' + vEsc(r.unit) : ''}</strong>` : '<span class="badge badge-warning">Result pending</span>'}
@@ -997,6 +1006,37 @@ async function loadLabHistory() {
   }
 }
 
+function editLabRecord(id) {
+  const r = labRecords.find(x => x._id === id);
+  if (!r) return;
+  const [requestId, itemId] = id.split('_');
+  labEditing = { requestId, itemId };
+  toggleLabForm(true);
+  document.getElementById('lab-f-name').value = r.patientName || labPatient.name;
+  document.getElementById('lab-f-address').value = r.address || '';
+  const sel = document.getElementById('lab-f-type');
+  const opt = [...sel.options].find(o => o.value === r.testType);
+  if (opt) { sel.value = r.testType; document.getElementById('lab-f-other').value = ''; }
+  else { sel.value = LAB_OTHER; document.getElementById('lab-f-other').value = r.testType; }
+  labTypeChanged();
+  document.getElementById('lab-f-result').value = r.result || '';
+  document.getElementById('lab-f-treatment').value = r.treatment || '';
+  document.getElementById('lab-f-notes').value = r.notes || '';
+  document.getElementById('lab-f-date').value = String(r.date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  document.getElementById('lab-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function deleteLabRecord(id) {
+  const r = labRecords.find(x => x._id === id);
+  if (!r || !confirm('Delete this ' + r.testType + ' record?')) return;
+  const [requestId, itemId] = id.split('_');
+  try {
+    await API.delete('/laboratory/records/' + requestId + '/' + itemId);
+    Toast.success('Laboratory record deleted');
+    await loadLabHistory();
+  } catch (e) { Toast.error(e.message); }
+}
+
 async function saveLabRecord() {
   const sel = document.getElementById('lab-f-type');
   const isOther = sel.value === LAB_OTHER;
@@ -1009,14 +1049,16 @@ async function saveLabRecord() {
   const btn = document.getElementById('lab-save-btn');
   btn.disabled = true;
   try {
-    await API.post('/laboratory/patient-records/' + labPatient.id, {
+    const payload = {
       testType, result, date,
       category: isOther ? 'Other' : (sel.selectedOptions[0]?.dataset.cat || ''),
       address: document.getElementById('lab-f-address').value.trim(),
       treatment: document.getElementById('lab-f-treatment').value.trim(),
       notes: document.getElementById('lab-f-notes').value.trim()
-    });
-    Toast.success('Laboratory test saved');
+    };
+    if (labEditing) await API.put('/laboratory/records/' + labEditing.requestId + '/' + labEditing.itemId, payload);
+    else await API.post('/laboratory/patient-records/' + labPatient.id, payload);
+    Toast.success(labEditing ? 'Laboratory test updated' : 'Laboratory test saved');
     toggleLabForm(false);
     await loadLabHistory();
   } catch (e) { Toast.error(e.message); }

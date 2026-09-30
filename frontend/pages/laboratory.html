@@ -42,7 +42,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Patient</th><th>Address</th><th>Test</th><th>Result</th><th>Treatment</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Date</th><th>Patient</th><th>Address</th><th>Test</th><th>Result</th><th>Treatment</th><th>Notes</th><th>Actions</th></tr></thead>
             <tbody id="lab-table"></tbody>
           </table>
         </div>
@@ -55,7 +55,7 @@
 <div class="modal-overlay" id="lab-modal">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">Add Lab Test</span>
+      <span class="modal-title" id="modal-title">Add Lab Test</span>
       <button class="modal-close" onclick="Modal.close('lab-modal')">×</button>
     </div>
     <div class="modal-body">
@@ -136,6 +136,8 @@ const TEST_TYPES = {
 };
 const OTHER = '__other__', NEW_PATIENT = '__new__';
 let registered = [], labOnly = [], catalogue = [];
+let recordList = [];   // records currently shown in the table
+let editing = null;    // { requestId, itemId } while editing an existing record
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
@@ -149,9 +151,10 @@ function flagBadge(flag) {
 async function loadRecords() {
   try {
     const list = await API.get('/laboratory/records?search=' + encodeURIComponent($('search-input').value));
+    recordList = list;
     $('record-count').textContent = `${list.length} total`;
     $('lab-table').innerHTML = !list.length
-      ? '<tr><td colspan="7"><div class="empty-state"><div class="icon"><i class="fa-solid fa-flask-vial"></i></div><h3>No laboratory records found</h3></div></td></tr>'
+      ? '<tr><td colspan="8"><div class="empty-state"><div class="icon"><i class="fa-solid fa-flask-vial"></i></div><h3>No laboratory records found</h3></div></td></tr>'
       : list.map(r => `<tr>
         <td style="white-space:nowrap">${Fmt.date(r.date)}</td>
         <td><strong>${esc(r.patientName)}</strong>
@@ -161,6 +164,10 @@ async function loadRecords() {
         <td>${r.result ? `<strong>${esc(r.result)}${r.unit && !String(r.result).includes(r.unit) ? ' ' + esc(r.unit) : ''}</strong>` : '<span class="badge badge-warning">Pending</span>'} ${flagBadge(r.flag)}</td>
         <td class="lab-cell">${esc(r.treatment) || '—'}</td>
         <td class="lab-cell">${esc(r.notes) || '—'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-secondary" style="padding:3px 8px" onclick="openEdit('${r._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-sm btn-danger" style="padding:3px 8px" onclick="deleteRecord('${r._id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </td>
       </tr>`).join('');
   } catch (e) { Toast.error('Failed to load laboratory records'); }
 }
@@ -205,12 +212,52 @@ function patientChanged() {
 function typeChanged() { $('other-wrap').style.display = $('f-type').value === OTHER ? '' : 'none'; }
 
 async function openAdd() {
+  editing = null;
+  $('modal-title').textContent = 'Add Lab Test';
+  $('f-patient').disabled = false;
   $('lab-form').reset();
   await loadRefData();
   fillSelects();
   $('f-date').value = new Date().toISOString().slice(0, 10);
   patientChanged(); typeChanged();
   Modal.open('lab-modal');
+}
+
+async function openEdit(id) {
+  const r = recordList.find(x => x._id === id);
+  if (!r) return;
+  const [requestId, itemId] = id.split('_');
+  editing = { requestId, itemId };
+  $('lab-form').reset();
+  await loadRefData();
+  fillSelects();
+  $('modal-title').textContent = 'Edit Lab Test';
+  // The patient cannot be changed on an existing record
+  $('f-patient').innerHTML = `<option value="">${esc(r.patientName)} (${esc(r.patientId)})</option>`;
+  $('f-patient').disabled = true;
+  $('new-patient-box').style.display = 'none';
+  $('f-address').value = r.address || '';
+  // Select the test type, or fall back to "Other" for custom / older entries
+  const opt = [...$('f-type').options].find(o => o.value === r.testType);
+  if (opt) { $('f-type').value = r.testType; $('f-other').value = ''; }
+  else { $('f-type').value = OTHER; $('f-other').value = r.testType; }
+  typeChanged();
+  $('f-date').value = String(r.date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  $('f-result').value = r.result || '';
+  $('f-treatment').value = r.treatment || '';
+  $('f-notes').value = r.notes || '';
+  Modal.open('lab-modal');
+}
+
+async function deleteRecord(id) {
+  const r = recordList.find(x => x._id === id);
+  if (!r || !confirm(`Delete this ${r.testType} record for ${r.patientName}?`)) return;
+  const [requestId, itemId] = id.split('_');
+  try {
+    await API.delete(`/laboratory/records/${requestId}/${itemId}`);
+    Toast.success('Laboratory record deleted');
+    loadRecords();
+  } catch (e) { Toast.error(e.message); }
 }
 
 async function saveRecord() {
@@ -224,6 +271,20 @@ async function saveRecord() {
     address: $('f-address').value.trim(),
     treatment: $('f-treatment').value.trim(), notes: $('f-notes').value.trim()
   };
+  if (editing) {
+    if (!testType) return Toast.warning(isOther ? 'Please specify the test.' : 'Please select a test.');
+    if (!body.result) return Toast.warning('Please enter the test result.');
+    if (!body.date) return Toast.warning('Please select the date.');
+    $('save-btn').disabled = true;
+    try {
+      await API.put(`/laboratory/records/${editing.requestId}/${editing.itemId}`, body);
+      Toast.success('Laboratory record updated');
+      Modal.close('lab-modal');
+      loadRecords();
+    } catch (e) { Toast.error(e.message); }
+    finally { $('save-btn').disabled = false; }
+    return;
+  }
   if (!pv) return Toast.warning('Please select a patient.');
   if (pv === NEW_PATIENT) {
     body.newPatient = { name: $('np-name').value.trim(), age: $('np-age').value, sex: $('np-sex').value, address: body.address };
